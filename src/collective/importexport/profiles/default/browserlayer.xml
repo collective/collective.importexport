@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<layers>
+  <layer
+      name="collective.importexport"
+      interface="collective.importexport.interfaces.ICollectiveImportexportLayer"
+      />
+</layers>
