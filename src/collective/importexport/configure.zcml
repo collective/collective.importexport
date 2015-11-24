@@ -9,8 +9,9 @@
 
   <i18n:registerTranslations directory="locales" />
 
+  <!-- internal dependencies -->
+  <include file="permissions.zcml" />
   <include package=".browser" />
-
 
   <genericsetup:registerProfile
       name="default"
@@ -38,7 +39,7 @@
   <genericsetup:importStep
       name="collective.importexport-uninstall"
       title="collective.importexport uninstall import step"
-      description="Import step run during ininstalling collective.importexport"
+      description="Import step run during installing collective.importexport"
       handler=".setuphandlers.uninstall">
   </genericsetup:importStep>
 
