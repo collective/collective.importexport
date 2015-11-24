@@ -70,8 +70,8 @@ options, args = parser.parse_args()
 
 try:
     if options.allow_site_packages:
-        import setuptools
         import pkg_resources
+        import setuptools
     from urllib.request import urlopen
 except ImportError:
     from urllib2 import urlopen
@@ -96,8 +96,8 @@ if options.setuptools_version is not None:
     setup_args['version'] = options.setuptools_version
 
 ez['use_setuptools'](**setup_args)
-import setuptools
-import pkg_resources
+import pkg_resources  # noqa
+import setuptools  # noqa
 
 # This does not (always?) update the default working set.  We will
 # do it.
@@ -119,7 +119,7 @@ find_links = os.environ.get(
     options.find_links or
     ('http://downloads.buildout.org/'
      if options.accept_buildout_test_releases else None)
-    )
+)
 if find_links:
     cmd.extend(['-f', find_links])
 
