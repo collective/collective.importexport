@@ -45,6 +45,6 @@ class TestUninstall(unittest.TestCase):
 
     def test_browserlayer_removed(self):
         """Test that ICollectiveImportexportLayer is removed."""
-        from collective.importexport.interfaces import ICollectiveImportexportLayer
+        from collective.importexport.interfaces import ICollectiveImportexportLayer  # noqa
         from plone.browserlayer import utils
-        self.assertNotIn(ICollectiveImportexportLayer, utils.registered_layers())
+        self.assertNotIn(ICollectiveImportexportLayer, utils.registered_layers())  # noqa
