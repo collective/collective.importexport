@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 from collective.importexport import _
-from plone import api
+# from plone import api
 from plone.namedfile.field import NamedFile
 from plone.z3cform.layout import wrap_form
-from Products.CMFCore.utils import getToolByName
+# from Products.CMFCore.utils import getToolByName
 from Products.CMFPlone.utils import safe_unicode
 from Products.statusmessages.interfaces import IStatusMessage
 from z3c.form import button
@@ -37,8 +37,8 @@ def dexterity_import(container, file_resource):
     count = 0
     reader = csv.DictReader(file_resource)
 
-    cat = getToolByName(container, 'portal_catalog')
-    container_path = '/'.join(container.getPhysicalPath())
+    # cat = getToolByName(container, 'portal_catalog')
+    # container_path = '/'.join(container.getPhysicalPath())
 
     # TODO(ivanteoh): Make sure container is either folder or SiteRoot
 
