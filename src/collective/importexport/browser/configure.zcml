@@ -17,22 +17,37 @@
       directory="static"
       />
 
+  <!-- Browser Views -->
   <browser:page
-      for="*"
+      for="Products.CMFCore.interfaces.ISiteRoot"
       name="dexterity_import_view"
-      permission="collective.importexport.import"
       class=".import_view.ImportView"
+      permission="collective.importexport.import"
       layer="..interfaces.ICollectiveImportexportLayer"
-      template="templates/import_view.pt"
       />
 
   <browser:page
-      for="*"
-      name="dexterity_export_view"
-      permission="collective.importexport.export"
-      class=".export_view.ExportView"
+      for="plone.folder.interfaces.IFolder"
+      name="dexterity_import_view"
+      class=".import_view.ImportView"
+      permission="collective.importexport.import"
       layer="..interfaces.ICollectiveImportexportLayer"
-      template="templates/export_view.pt"
+      />
+
+  <browser:page
+      for="Products.CMFCore.interfaces.ISiteRoot"
+      name="dexterity_export_view"
+      class=".export_view.ExportView"
+      permission="collective.importexport.export"
+      layer="..interfaces.ICollectiveImportexportLayer"
+      />
+
+  <browser:page
+      for="plone.folder.interfaces.IFolder"
+      name="dexterity_export_view"
+      class=".export_view.ExportView"
+      permission="collective.importexport.export"
+      layer="..interfaces.ICollectiveImportexportLayer"
       />
 
 </configure>
