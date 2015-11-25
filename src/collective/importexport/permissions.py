@@ -3,10 +3,10 @@ from Products.CMFCore.permissions import setDefaultRoles
 
 security = ModuleSecurityInfo('Products.CMFCore.permissions')
 
-security.declarePublic('ImportSection')
-ImportSection = 'collective.importexport: Import'
-setDefaultRoles(ImportSection, ('Member', 'Manager'))
+security.declarePublic("DexterityImport")
+DexterityImport = "collective.importexport: Import"
+setDefaultRoles(DexterityImport, ("Member", "Manager"))
 
-security.declarePublic('ExportSection')
-ExportSection = 'collective.importexport: Export'
-setDefaultRoles(ExportSection, ('Member', 'Manager'))
+security.declarePublic("DexterityExport")
+DexterityExport = "collective.importexport: Export"
+setDefaultRoles(DexterityExport, ("Member", "Manager"))

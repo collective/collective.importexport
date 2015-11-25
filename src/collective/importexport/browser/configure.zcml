@@ -17,4 +17,22 @@
       directory="static"
       />
 
+  <browser:page
+      for="*"
+      name="dexterity_import_view"
+      permission="collective.importexport.import"
+      class=".import_view.ImportView"
+      layer="..interfaces.ICollectiveImportexportLayer"
+      template="templates/import_view.pt"
+      />
+
+  <browser:page
+      for="*"
+      name="dexterity_export_view"
+      permission="collective.importexport.export"
+      class=".export_view.ExportView"
+      layer="..interfaces.ICollectiveImportexportLayer"
+      template="templates/export_view.pt"
+      />
+
 </configure>

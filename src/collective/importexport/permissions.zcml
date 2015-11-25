@@ -1,14 +1,14 @@
 <configure
-  i18n_domain="collective.importexport"
-  xmlns:zcml="http://namespaces.zope.org/zcml"
-  xmlns="http://namespaces.zope.org/zope">
+    i18n_domain="collective.importexport"
+    xmlns:zcml="http://namespaces.zope.org/zcml"
+    xmlns="http://namespaces.zope.org/zope">
   <configure
-    zcml:condition="installed AccessControl.security">
+      zcml:condition="installed AccessControl.security">
     <permission
-      id="collective.importexport.import"
-      title="collective.importexport: Import"/>
+        id="collective.importexport.import"
+        title="collective.importexport: Import" />
     <permission
-      id="collective.importexport.export" 
-      title="collective.importexport: Export"/>
+        id="collective.importexport.export"
+        title="collective.importexport: Export" />
   </configure>
 </configure>
