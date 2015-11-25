@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 from collective.importexport import _
-# from plone import api
+from plone import api
 from plone.namedfile.field import NamedFile
 from plone.z3cform.layout import wrap_form
 # from Products.CMFCore.utils import getToolByName
 from Products.CMFPlone.utils import safe_unicode
-from Products.statusmessages.interfaces import IStatusMessage
 from z3c.form import button
 from z3c.form import field
 from z3c.form import form
@@ -94,10 +93,11 @@ class ImportForm(form.Form):
 
         self.save_data(data)
 
-        IStatusMessage(self.request).addStatusMessage(
-            _("import_message_save",  # nopep8
-              default=u"Import settings saved."),
-            'info')
+        api.portal.show_message(
+            message=_("import_message_save",  # nopep8
+                default=u"Import settings saved."),
+            request=self.request,
+            type="info")
         self.request.response.redirect(self.context.absolute_url())
 
     @button.buttonAndHandler(_("import_button_save_import",  # nopep8
@@ -128,25 +128,29 @@ class ImportForm(form.Form):
 
             count = import_metadata['count']
 
-            IStatusMessage(self.request).addStatusMessage(
-                _("import_message_csv_info",  # nopep8
-                  default=u"${num} items imported from ${filename}",
-                  mapping={'num': count, 'filename': file_name}),
-                'info')
+            api.portal.show_message(
+                message=_("import_message_csv_info",  # nopep8
+                    default=u"${num} items imported from ${filename}",
+                    mapping={'num': count, 'filename': file_name}),
+                request=self.request,
+                type="info")
 
         else:
-            IStatusMessage(self.request).addStatusMessage(
-                _("import_message_csv_error",  # nopep8
-                  default=u"Please provide a csv file."), 'error')
+            api.portal.show_message(
+                message=_("import_message_csv_error",  # nopep8
+                    default=u"Please provide a csv file."),
+                request=self.request,
+                type="error")
 
         self.request.response.redirect(self.context.absolute_url())
 
     @button.buttonAndHandler(u'Cancel')
     def handleCancel(self, action):
-        IStatusMessage(self.request).addStatusMessage(
-            _("import_message_cancel",  # nopep8
-              default="Import canceled."),
-            "info")
+        api.portal.show_message(
+            message=_("import_message_cancel",  # nopep8
+                default="Import canceled."),
+            request=self.request,
+            type="info")
         self.request.response.redirect(self.context.absolute_url())
 
 ImportView = wrap_form(ImportForm)
