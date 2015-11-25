@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 from collective.importexport import _
+from plone import api
 from plone.namedfile.field import NamedFile
 from plone.z3cform.layout import wrap_form
+from Products.CMFCore.utils import getToolByName
+from Products.CMFPlone.utils import safe_unicode
 from Products.statusmessages.interfaces import IStatusMessage
 from z3c.form import button
 from z3c.form import field
@@ -9,10 +12,47 @@ from z3c.form import form
 from zope.interface import Interface
 # from zope import schema
 
+import csv
+
+# TODO(ivanteoh): convert to import config option (csv_col, obj_field)
+matching_fields = (
+    ("Filename", "filename"),
+    ("Title", "title"),
+    ("Summary", "description"),
+    ("IAID", "iaid"),
+    ("Citable Reference", "citable")
+)
+
+
+def _get_prop(prop, item, default=None):
+    """Get value from prop as key in dictionary item."""
+    ret = default
+    if prop in item:
+        ret = safe_unicode(item[prop])
+    return ret
+
 
 def dexterity_import(container, file_resource):
     """Import to dexterity-types from file to container."""
     count = 0
+    reader = csv.DictReader(file_resource)
+
+    cat = getToolByName(container, 'portal_catalog')
+    container_path = '/'.join(container.getPhysicalPath())
+
+    # TODO(ivanteoh): Make sure container is either folder or SiteRoot
+
+    import_list = []
+    # Find all the fields value
+    for row in reader:
+        fields = {}
+        for csv_col, obj_field in matching_fields:
+            field_value = _get_prop(csv_col, row)
+            fields[obj_field] = field_value
+        import_list.append(fields)
+        count += 1
+
+    # TODO(ivanteoh): Save the objects in this container
 
     return {'count': count}
 
