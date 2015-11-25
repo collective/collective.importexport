@@ -21,8 +21,10 @@ class IImportSchema(Interface):
     """Import settings."""
 
     import_file = NamedFile(
-        title=_(u"Import File"),
-        description=_(u"In CSV format."),
+        title=_("import_field_file_title",  # nopep8
+                default=u"Import File"),
+        description=_("import_field_file_description",  # nopep8
+                      default=u"In CSV format."),
         required=True)
 
 
@@ -32,8 +34,10 @@ class ImportForm(form.Form):
     fields = field.Fields(IImportSchema)
     ignoreContext = True
 
-    label = _(u"Import")
-    description = _(u"Import data to dexterity-types objects.")
+    label = _("import_form_label",  # nopep8
+              default=u"Import")
+    description = _("import_form_description",  # nopep8
+                    default=u"Import data to dexterity-types objects.")
 
     def save_data(self, data):
         # TODO(ivanteoh): save date using Annotation Adapter
@@ -42,7 +46,7 @@ class ImportForm(form.Form):
     def updateWidgets(self):
         super(ImportForm, self).updateWidgets()
 
-    @button.buttonAndHandler(u'Save')
+    @button.buttonAndHandler(_("import_button_save", default=u"Save"))  # nopep8
     def handleSave(self, action):
         data, errors = self.extractData()
         if errors:
@@ -51,11 +55,13 @@ class ImportForm(form.Form):
         self.save_data(data)
 
         IStatusMessage(self.request).addStatusMessage(
-            _(u"Import settings saved."),
+            _("import_message_save",  # nopep8
+              default=u"Import settings saved."),
             'info')
         self.request.response.redirect(self.context.absolute_url())
 
-    @button.buttonAndHandler(_(u"Save and Import"))
+    @button.buttonAndHandler(_("import_button_save_import",  # nopep8
+                               default=u"Save and Import"))
     def handleSaveImport(self, action):
         data, errors = self.extractData()
         if errors:
@@ -83,20 +89,23 @@ class ImportForm(form.Form):
             count = import_metadata['count']
 
             IStatusMessage(self.request).addStatusMessage(
-                _(u"${num} items imported from ${filename}",  # nopep8
+                _("import_message_csv_info",  # nopep8
+                  default=u"${num} items imported from ${filename}",
                   mapping={'num': count, 'filename': file_name}),
                 'info')
 
         else:
             IStatusMessage(self.request).addStatusMessage(
-                _(u"Please provide a csv file."), 'error')
+                _("import_message_csv_error",  # nopep8
+                  default=u"Please provide a csv file."), 'error')
 
         self.request.response.redirect(self.context.absolute_url())
 
     @button.buttonAndHandler(u'Cancel')
     def handleCancel(self, action):
         IStatusMessage(self.request).addStatusMessage(
-            _("Import canceled."),
+            _("import_message_cancel",  # nopep8
+              default="Import canceled."),
             "info")
         self.request.response.redirect(self.context.absolute_url())
 
