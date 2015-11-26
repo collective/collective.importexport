@@ -46,6 +46,8 @@ setup(
         'plone.api',
         'setuptools',
         'z3c.jbot',
+        'plone.autoform',
+        'plone.directives.form',
     ],
     extras_require={
         'test': [
