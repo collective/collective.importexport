@@ -100,12 +100,12 @@ def dexterity_import(container, resources, creation_type, primary_key=None):
     if not resources:
         return {"count": count}
 
-    # TODO(ivanteoh): Make sure the object have all the keys
+    # TODO(ivanteoh): Make sure the object have all the valid keys
     # keys = resources[0].keys()
     # hasProperty, getProperty not working
 
-    # cat = api.portal.get_tool(name="portal_catalog")
-    # container_path = '/'.join(container.getPhysicalPath())
+    catalog = api.portal.get_tool(name="portal_catalog")
+    container_path = '/'.join(container.getPhysicalPath())
 
     # TODO(ivanteoh): Make sure container is either folder or SiteRoot
     normalizer = getUtility(IIDNormalizer)
@@ -113,15 +113,29 @@ def dexterity_import(container, resources, creation_type, primary_key=None):
     for resource in resources:
         obj = None
 
-        # primary_key must be either u"id" or u"title"
+        # must have either u"id" or u"title"
+        # primary_key value will be used as id
         if primary_key:
             # Normalizers to safe ids
+            id_key = normalizer.normalize(resource[primary_key])
 
-            # Save the objects in this container
-            obj = api.content.create(
-                type=creation_type,
-                id=normalizer.normalize(resource[primary_key]),
-                container=container)
+            # find existing obj
+            results = catalog(
+                portal_type=creation_type,
+                path={'query': container_path, 'depth': 1},
+                id=id_key
+            )
+
+            if not results:
+                # Save the objects in this container
+                obj = api.content.create(
+                    type=creation_type,
+                    id=id_key,
+                    container=container
+                )
+
+            else:
+                obj = results[0].getObject()
 
         if not obj and u"title" in resource:
             # Save the objects in this container
@@ -223,7 +237,6 @@ class ImportForm(form.SchemaForm):
             # File upload is not saved in settings
             file_resource = import_file.data
             file_name = import_file.filename
-            #import pdb; pdb.set_trace()
 
             # TODO(ivanteoh): use import_file.contentType to check csv file ext
 
@@ -232,7 +245,7 @@ class ImportForm(form.SchemaForm):
             log.debug(dx_types)
             # TODO(ivanteoh): user will pick a types.
 
-            #creation_type = "Document"
+            # creation_type = "Document"
             creation_type = "WildcardVideo"
 
             # based from the types, display all the fields
