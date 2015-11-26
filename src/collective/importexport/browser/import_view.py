@@ -19,6 +19,7 @@ import StringIO
 import time
 
 log = logging.getLogger(__name__)
+KEY_ID = u"_id"
 
 # TODO(ivanteoh): convert to import config option (csv_col, obj_field)
 matching_fields = {
@@ -68,7 +69,7 @@ def _get_prop(prop, item, default=None):
     return ret
 
 
-def process_file(data, mappings):
+def process_file(data, mappings, primary_key):
     """Process the file and return all the values.
 
     @param data: file content.
@@ -78,10 +79,20 @@ def process_file(data, mappings):
     io = StringIO.StringIO(data)
     reader = csv.DictReader(io, delimiter=",", dialect="excel", quotechar='"')
     rows = []
+    normalizer = getUtility(IIDNormalizer)
 
     # return only fields are needed.
     for row in reader:
         fields = {}
+
+        # set primary_key
+        if primary_key not in row:
+            continue
+
+        key_value = row[primary_key].decode("utf-8")
+        # Normalizers to safe ids
+        fields[KEY_ID] = normalizer.normalize(key_value)
+
         for key, value in row.items():
             if not key:
                 continue
@@ -93,7 +104,7 @@ def process_file(data, mappings):
     return rows
 
 
-def dexterity_import(container, resources, creation_type, primary_key=None):
+def dexterity_import(container, resources, creation_type):
     """Import to dexterity-types from file to container."""
     count = 0
 
@@ -108,53 +119,50 @@ def dexterity_import(container, resources, creation_type, primary_key=None):
     container_path = '/'.join(container.getPhysicalPath())
 
     # TODO(ivanteoh): Make sure container is either folder or SiteRoot
-    normalizer = getUtility(IIDNormalizer)
 
     for resource in resources:
         obj = None
 
         # must have either u"id" or u"title"
         # primary_key value will be used as id
-        if primary_key:
-            # Normalizers to safe ids
-            id_key = normalizer.normalize(resource[primary_key])
+        id_key = resource[KEY_ID]
 
-            # find existing obj
-            results = catalog(
-                portal_type=creation_type,
-                path={'query': container_path, 'depth': 1},
-                id=id_key
-            )
+        # find existing obj
+        results = catalog(
+            portal_type=creation_type,
+            path={'query': container_path, 'depth': 1},
+            id=id_key
+        )
 
-            if not results:
-                # Save the objects in this container
-                obj = api.content.create(
-                    type=creation_type,
-                    id=id_key,
-                    container=container
-                )
+        # TODO(ivanteoh): must have title when create object.
+        # if not the folder content show empty titles
 
-            else:
-                obj = results[0].getObject()
-
-        if not obj and u"title" in resource:
+        if not results:
             # Save the objects in this container
             obj = api.content.create(
                 type=creation_type,
-                title=resource[u"title"],
-                container=container)
+                id=id_key,
+                container=container,
+                safe_id=True
+            )
+
+        else:
+            obj = results[0].getObject()
 
         # http://docs.plone.org/develop/plone/misc/normalizing_ids.html
+        # not enter here either
         if not obj:
             obj = api.content.create(
                 type=creation_type,
                 id=time.time(),
-                container=container)
+                container=container,
+                safe_id=True
+            )
 
         assert obj.id
 
         for key, value in resource.items():
-            if key != u"id" or key != u"title":
+            if key != KEY_ID or key != u"id":
                 setattr(obj, key, value)
 
         count += 1
@@ -243,17 +251,20 @@ class ImportForm(form.SchemaForm):
             # list all the dexterity types
             dx_types = get_portal_types(self.request)
             log.debug(dx_types)
-            # TODO(ivanteoh): user will pick a types.
 
+            # TODO(ivanteoh): user will pick a types.
             # creation_type = "Document"
             creation_type = "WildcardVideo"
+
+            # TODO(ivanteoh): user will pick a primary_key.
+            primary_key = "Filename"
 
             # based from the types, display all the fields
             fields = get_schema_info(creation_type)
             log.debug(fields)
 
             # based from the matching fields, get all the values.
-            rows = process_file(file_resource, matching_fields)
+            rows = process_file(file_resource, matching_fields, primary_key)
             log.debug(rows)
 
             import_metadata = dexterity_import(
