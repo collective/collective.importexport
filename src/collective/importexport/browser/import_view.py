@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+from plone.dexterity.utils import iterSchemataForType
+from zope.schema.interfaces import IContextSourceBinder
+from zope.schema.vocabulary import SimpleVocabulary
 from collective.importexport import _
 from plone import api
 from plone.namedfile.field import NamedFile
@@ -8,7 +11,9 @@ from Products.CMFPlone.utils import safe_unicode
 from z3c.form import button
 from z3c.form import field
 from z3c.form import form
-from zope.interface import Interface
+from zope.interface import Interface, directlyProvides
+from zope import schema
+
 # from zope import schema
 
 import csv
@@ -56,8 +61,53 @@ def dexterity_import(container, file_resource):
     return {'count': count}
 
 
+
+def fields_list(context):
+    terms = []
+
+    # need to look up all the possible fields we can set on all the content
+    # types we might update in the given folder
+    found = {}
+
+    for fti in context.contenttypescanaddhere():
+        portal_type = fti.getId()
+        schemas = iterSchemataForType(portal_type)
+        for schema in schemas:
+            for field in schema:
+                if field not in found:
+                    found[field] = 1
+                    terms.append(SimpleVocabulary.createTerm(field, field, field))
+
+
+    #for term in ['Slovenia', 'Spain', 'Portugal', 'France']:
+    #    terms.append(SimpleVocabulary.createTerm(term, term, term))
+    return SimpleVocabulary(terms)
+directlyProvides(fields_list, IContextSourceBinder)
+
+def headers_list(context):
+    """ use the last upload header info from the last uploaded file
+    """
+
+
+    terms = []
+    #for term in ['Slovenia', 'Spain', 'Portugal', 'France']:
+    #    terms.append(SimpleVocabulary.createTerm(term, term, term))
+    return SimpleVocabulary(terms)
+directlyProvides(headers_list, IContextSourceBinder)
+
+
 class IImportSchema(Interface):
     """Import settings."""
+
+    header_mapping = schema.Dict(
+        title=_(u'Header Mapping'),
+        description=_(u"Any matching headers in your CSV will be mapped to "
+                      u"these fields"),
+        key_type=schema.Choice(source=headers_list, title=u"header"),
+        value_type=schema.Choice(source=fields_list, title=u"field"),
+        #default={'table th td': 'width height'},
+        missing_value={},
+        required=False)
 
     import_file = NamedFile(
         title=_("import_field_file_title",  # nopep8
@@ -65,6 +115,9 @@ class IImportSchema(Interface):
         description=_("import_field_file_description",  # nopep8
                       default=u"In CSV format."),
         required=True)
+
+
+
 
 
 class ImportForm(form.Form):
@@ -83,6 +136,9 @@ class ImportForm(form.Form):
         pass
 
     def updateWidgets(self):
+
+
+
         super(ImportForm, self).updateWidgets()
 
     @button.buttonAndHandler(_("import_button_save", default=u"Save"))  # nopep8

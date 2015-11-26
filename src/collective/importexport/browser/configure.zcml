@@ -11,6 +11,16 @@
       layer="collective.importexport.interfaces.ICollectiveImportexportLayer"
       />
 
+
+  <!--<adapter-->
+          <!--factory=".import_view.headers_list"-->
+          <!--provides="zope.schema.interfaces.IContextSourceBinder"-->
+          <!--/>-->
+  <!--<adapter-->
+          <!--factory=".import_view.fields_list"-->
+          <!--provides="zope.schema.interfaces.IContextSourceBinder"-->
+          <!--/>-->
+
   <!-- Publish static files -->
   <browser:resourceDirectory
       name="collective.importexport"
