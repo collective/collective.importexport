@@ -22,11 +22,11 @@ log = logging.getLogger(__name__)
 
 # TODO(ivanteoh): convert to import config option (csv_col, obj_field)
 matching_fields = {
-#    "Filename": u"filename",
+    "Filename": u"filename",
     "Title": u"title",
     "Summary": u"description",
-#    "IAID": u"iaid",
-#    "Citable Reference": u"citable_reference",
+    "IAID": u"iaid",
+    "Citable Reference": u"citable_reference",
 }
 
 
@@ -232,8 +232,8 @@ class ImportForm(form.SchemaForm):
             log.debug(dx_types)
             # TODO(ivanteoh): user will pick a types.
 
-            creation_type = "Document"
-            # creation_type = "WildcardVideo"
+            #creation_type = "Document"
+            creation_type = "WildcardVideo"
 
             # based from the types, display all the fields
             fields = get_schema_info(creation_type)
