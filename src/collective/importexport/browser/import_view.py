@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
+from Products.CMFPlone.interfaces import ISelectableConstrainTypes, IConstrainTypes
 from plone.dexterity.utils import iterSchemataForType
+from plone.formwidget.namedfile import NamedFileFieldWidget
 from zope.schema.interfaces import IContextSourceBinder
 from zope.schema.vocabulary import SimpleVocabulary
 from collective.importexport import _
@@ -68,8 +70,11 @@ def fields_list(context):
     # need to look up all the possible fields we can set on all the content
     # types we might update in the given folder
     found = {}
+    if context is None:
+        return SimpleVocabulary([])
 
-    for fti in context.contenttypescanaddhere():
+    #TODO: won't work in the root
+    for fti in IConstrainTypes(context).allowedContentTypes():
         portal_type = fti.getId()
         schemas = iterSchemataForType(portal_type)
         for schema in schemas:
@@ -95,19 +100,11 @@ def headers_list(context):
     return SimpleVocabulary(terms)
 directlyProvides(headers_list, IContextSourceBinder)
 
+#class MyNamedFileFieldWidget(NamedFileFieldWidget):
+
 
 class IImportSchema(Interface):
     """Import settings."""
-
-    header_mapping = schema.Dict(
-        title=_(u'Header Mapping'),
-        description=_(u"Any matching headers in your CSV will be mapped to "
-                      u"these fields"),
-        key_type=schema.Choice(source=headers_list, title=u"header"),
-        value_type=schema.Choice(source=fields_list, title=u"field"),
-        #default={'table th td': 'width height'},
-        missing_value={},
-        required=False)
 
     import_file = NamedFile(
         title=_("import_field_file_title",  # nopep8
@@ -116,7 +113,41 @@ class IImportSchema(Interface):
                       default=u"In CSV format."),
         required=True)
 
+#    form.widget('header_mapping', NamedFileFieldWidget)
+    header_mapping = schema.Dict(
+        title=_(u'Header Mapping'),
+        description=_(u"Any matching headers in your CSV will be mapped to "
+                      u"these fields"),
+        key_type=schema.TextLine(title=u"header"),
+        value_type=schema.Choice(source=fields_list, title=u"field"),
+        #default={'table th td': 'width height'},
+        missing_value={},
+        required=False)
 
+
+read_headers = u"""
+  function(evt) {
+    var files = evt.target.files; // FileList object
+
+    // files is a FileList of File objects. List some properties.
+    var output = [];
+    for (var i = 0, f; f = files[i]; i++) {
+      output.push('<li><strong>', escape(f.name), '</strong> (', f.type || 'n/a', ') - ',
+                  f.size, ' bytes, last modified: ',
+                  f.lastModifiedDate ? f.lastModifiedDate.toLocaleDateString() : 'n/a',
+                  '</li>');
+    }
+    document.getElementById('list').innerHTML = '<ul>' + output.join('') + '</ul>';
+
+    // now read the first line of the file.
+    // do an AJAX call sending header
+    // AJAX will return a new form. extract out new header_mapping. This will
+    // now have defaults for all the headers.
+    // replace the old header_mapping widget with the new one
+  }
+
+
+"""
 
 
 
@@ -136,10 +167,11 @@ class ImportForm(form.Form):
         pass
 
     def updateWidgets(self):
-
-
+        # TODO: Maybe here take the header from the request and use it to set
+        # defaults on the header_mapping.
 
         super(ImportForm, self).updateWidgets()
+        self.widgets['import_file'].onselect = u"alert('got this');"
 
     @button.buttonAndHandler(_("import_button_save", default=u"Save"))  # nopep8
     def handleSave(self, action):
