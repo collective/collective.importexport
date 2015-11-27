@@ -21,6 +21,7 @@ from zope.component import getUtility
 from zope.event import notify
 from zope.i18n import translate
 from zope.lifecycleevent import ObjectModifiedEvent
+from Products.Five.browser.pagetemplatefile import ViewPageTemplateFile as FiveViewPageTemplateFile
 
 import csv
 import logging
@@ -172,33 +173,6 @@ def headers_list(context):
     return SimpleVocabulary(terms)
 directlyProvides(headers_list, IContextSourceBinder)
 
-#class MyNamedFileFieldWidget(NamedFileFieldWidget):
-
-
-
-read_headers = u"""
-  function(evt) {
-    var files = evt.target.files; // FileList object
-
-    // files is a FileList of File objects. List some properties.
-    var output = [];
-    for (var i = 0, f; f = files[i]; i++) {
-      output.push('<li><strong>', escape(f.name), '</strong> (', f.type || 'n/a', ') - ',
-                  f.size, ' bytes, last modified: ',
-                  f.lastModifiedDate ? f.lastModifiedDate.toLocaleDateString() : 'n/a',
-                  '</li>');
-    }
-    document.getElementById('list').innerHTML = '<ul>' + output.join('') + '</ul>';
-
-    // now read the first line of the file.
-    // do an AJAX call sending header
-    // AJAX will return a new form. extract out new header_mapping. This will
-    // now have defaults for all the headers.
-    // replace the old header_mapping widget with the new one
-  }
-
-
-"""
 
 
 def dexterity_import(container, resources, object_type, create_new=False):
@@ -492,4 +466,7 @@ class ImportForm(form.SchemaForm):
             type="info")
         self.request.response.redirect(self.context.absolute_url())
 
-ImportView = wrap_form(ImportForm)
+# IF you want to customize form frame you need to make a custom FormWrapper view around it
+# (default plone.z3cform.layout.FormWrapper is supplied automatically with form.py templates)
+#report_form_frame = plone.z3cform.layout.wrap_form(ReportForm, index=FiveViewPageTemplateFile("templates/reporter.pt"))
+ImportView = wrap_form(ImportForm, index=FiveViewPageTemplateFile("import_view.pt"))
