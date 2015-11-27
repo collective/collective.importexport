@@ -66,6 +66,7 @@ def get_portal_types(request, all=True):
     return sorted(results, key=itemgetter("title"))
 
 
+# TODO(ivanteoh): Not used, remove later
 def get_schema_info(portal_type):
     """Get a flat list of all fields in all schemas for a content-type.
 
@@ -81,6 +82,7 @@ def get_schema_info(portal_type):
     return fields
 
 
+# TODO(ivanteoh): Not used, remove later
 def _get_prop(prop, item, default=None):
     """Get value from prop as key in dictionary item."""
     ret = default
@@ -129,7 +131,7 @@ def process_file(data, mappings, primary_key):
     return rows
 
 
-def dexterity_import(container, resources, creation_type, create_new=False):
+def dexterity_import(container, resources, object_type, create_new=False):
     """Import to dexterity-types from file to container."""
     new_count = 0
     existing_count = 0
@@ -168,7 +170,7 @@ def dexterity_import(container, resources, creation_type, create_new=False):
 
         # find existing obj
         results = catalog(
-            portal_type=creation_type,
+            portal_type=object_type,
             path={"query": container_path, "depth": 1},
             id=id_key
         )
@@ -184,7 +186,7 @@ def dexterity_import(container, resources, creation_type, create_new=False):
         elif create_new:
             # Save the objects in this container
             obj = api.content.create(
-                type=creation_type,
+                type=object_type,
                 id=id_key,
                 container=container,
                 safe_id=True,
@@ -208,19 +210,35 @@ class IImportSchema(form.Schema):
     """Define fields used on the form."""
 
     import_file = NamedFile(
-        title=_("import_field_import_file_title",  # nopep8
-                default=u"Import File"),
-        description=_("import_field_import_file_description",  # nopep8
-                      default=u"In CSV format."),
+        title=_(
+            "import_field_import_file_title",  # nopep8
+            default=u"Import File"),
+        description=_(
+            "import_field_import_file_description",  # nopep8
+            default=u"In CSV format."),
+        required=True
+    )
+    object_type = schema.Choice(
+        title=_(
+            "import_field_object_type_title",  # nopep8
+            default=u"Object Type"),
+        description=_(
+            "import_field_object_type_description",
+            default=u"Content type of the import object, "
+                    u"which is created or updated when "
+                    u"importing from the file."),
+        vocabulary='plone.app.vocabularies.ReallyUserFriendlyTypes',
         required=True
     )
     create_new = schema.Bool(
-        title=_("import_field_create_new_title",  # nopep8
-                default=u"Create New"),
-        description=_("import_field_create_new_description",  # nopep8
-                      default=u"""It will create new object if doesn't exist
-                      based from the primary key.
-                      Or else it will be ignored."""),
+        title=_(
+            "import_field_create_new_title",  # nopep8
+            default=u"Create New"),
+        description=_(
+            "import_field_create_new_description",  # nopep8
+            default=u"It will create new object if doesn't exist "
+                    u"based from the primary key. "
+                    u"Or else it will be ignored."),
     )
 
 
@@ -281,6 +299,7 @@ class ImportForm(form.SchemaForm):
 
         import_file = data["import_file"]
         create_new = data["create_new"]
+        object_type = data["object_type"]
 
         if import_file:
 
@@ -295,8 +314,8 @@ class ImportForm(form.SchemaForm):
             log.debug(dx_types)
 
             # based from the types, display all the fields
-            fields = get_schema_info(CREATION_TYPE)
-            log.debug(fields)
+            # fields = get_schema_info(CREATION_TYPE)
+            # log.debug(fields)
 
             # based from the matching fields, get all the values.
             rows = process_file(file_resource, matching_fields, PRIMARY_KEY)
@@ -305,7 +324,7 @@ class ImportForm(form.SchemaForm):
             import_metadata = dexterity_import(
                 self.context,
                 rows,
-                CREATION_TYPE,
+                object_type,
                 create_new
             )
 
