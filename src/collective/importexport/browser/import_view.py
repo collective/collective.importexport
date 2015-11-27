@@ -11,7 +11,9 @@ from plone.z3cform.layout import wrap_form
 from Products.CMFPlone.utils import safe_unicode
 from z3c.form import button
 from zope.component import getUtility
+from zope.event import notify
 from zope.i18n import translate
+from zope.lifecycleevent import ObjectModifiedEvent
 
 import csv
 import logging
@@ -136,7 +138,6 @@ def dexterity_import(container, resources, creation_type):
     container_path = '/'.join(container.getPhysicalPath())
 
     # TODO(ivanteoh): Make sure container is either folder or SiteRoot
-    # import pdb; pdb.set_trace()
 
     for resource in resources:
         obj = None
@@ -162,13 +163,13 @@ def dexterity_import(container, resources, creation_type):
             id=id_key
         )
 
-        # TODO(ivanteoh): must have title when create object.
-        # if not the folder content show empty titles
-
         if results:
             obj = results[0].getObject()
             for key, value in key_arg.items():
+                # does not update metadata
                 setattr(obj, key, value)
+            # TODO(ivanteoh): any performance risk by calling this?
+            notify(ObjectModifiedEvent(obj))
             existing_count += 1
         else:
             # Save the objects in this container
