@@ -251,7 +251,7 @@ def dexterity_import(container, resources, object_type, create_new=False):
 
         # generate report for csv export
         key_arg[u"id"] = obj.id
-        report.append[key_arg]
+        report.append(key_arg)
 
     # Later if want to rename
     # api.content.rename(obj=portal["blog"], new_id="old-blog")
