@@ -304,30 +304,30 @@ class IImportSchema(form.Schema):
         #default={'table th td': 'width height'},
         missing_value={},
         required=False)
-    import_columns = schema.List(
-        title=_(
-            "import_field_import_columns_title",  # nopep8
-            default=u"Import Columns"),
-        description=_(
-            "import_field_import_columns_description",  # nopep8
-            default=u"The order of these columns will match with "
-                    u"the object fields below."),
-        value_type=schema.Choice(
-            values=("A", "B", "C", "D")),
-        default=["D", "B"]
-    )
-    primary_key = schema.Choice(
-        title=_(
-            "import_field_primary_key_title",  # nopep8
-            default=u"Primary Key"),
-        description=_(
-            "import_field_primary_key_description",
-            default=u"Select one of the column name as primary key, "
-                    u"which will used as ID when creation or "
-                    u"finding existing objects."),
-        vocabulary=vocabularies,
-        required=True
-    )
+#    import_columns = schema.List(
+#        title=_(
+#            "import_field_import_columns_title",  # nopep8
+#            default=u"Import Columns"),
+#        description=_(
+#            "import_field_import_columns_description",  # nopep8
+#            default=u"The order of these columns will match with "
+#                    u"the object fields below."),
+#        value_type=schema.Choice(
+#            values=("A", "B", "C", "D")),
+#        default=["D", "B"]
+#    )
+#    primary_key = schema.Choice(
+#        title=_(
+#            "import_field_primary_key_title",  # nopep8
+#            default=u"Primary Key"),
+#        description=_(
+#            "import_field_primary_key_description",
+#            default=u"Select one of the column name as primary key, "
+#                    u"which will used as ID when creation or "
+#                    u"finding existing objects."),
+#        vocabulary=vocabularies,
+#        required=True
+#    )
     object_type = schema.Choice(
         title=_(
             "import_field_object_type_title",  # nopep8
@@ -340,18 +340,18 @@ class IImportSchema(form.Schema):
         vocabulary='plone.app.vocabularies.ReallyUserFriendlyTypes',
         required=True
     )
-    object_fields = schema.List(
-        title=_(
-            "import_field_object_fields_title",  # nopep8
-            default=u"Object Fields"),
-        description=_(
-            "import_field_object_fields_description",  # nopep8
-            default=u"The order of these fields will match with "
-                    u"import columns above."),
-        value_type=schema.Choice(
-            values=(1, 2, 3, 4)),
-        default=[1, 3]
-    )
+#    object_fields = schema.List(
+#        title=_(
+#            "import_field_object_fields_title",  # nopep8
+#            default=u"Object Fields"),
+#        description=_(
+#            "import_field_object_fields_description",  # nopep8
+#            default=u"The order of these fields will match with "
+#                    u"import columns above."),
+#        value_type=schema.Choice(
+#            values=(1, 2, 3, 4)),
+#        default=[1, 3]
+#    )
     create_new = schema.Bool(
         title=_(
             "import_field_create_new_title",  # nopep8
