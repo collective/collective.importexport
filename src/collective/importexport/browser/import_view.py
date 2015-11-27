@@ -10,10 +10,12 @@ from plone import api
 from plone.dexterity.interfaces import IDexterityFTI
 from plone.dexterity.utils import iterSchemataForType
 from plone.directives import form
+from plone.i18n.normalizer.interfaces import IIDNormalizer
 from plone.i18n.normalizer.interfaces import IURLNormalizer
 from plone.namedfile.field import NamedFile
 from plone.z3cform.layout import wrap_form
 from Products.CMFPlone.utils import safe_unicode
+from tempfile import NamedTemporaryFile
 from z3c.form import button
 from zope.interface import Interface, directlyProvides
 from zope import schema
@@ -25,6 +27,7 @@ from zope.lifecycleevent import ObjectModifiedEvent
 import csv
 import logging
 import StringIO
+import time
 
 log = logging.getLogger(__name__)
 KEY_ID = u"_id"
@@ -206,11 +209,13 @@ def dexterity_import(container, resources, object_type, create_new=False):
     new_count = 0
     existing_count = 0
     ignore_count = 0
+    report = []
 
     if not resources:
         return {"existing_count": existing_count,
                 "new_count": new_count,
-                "ignore_count": ignore_count}
+                "ignore_count": ignore_count,
+                "report": report}
 
     # TODO(ivanteoh): Make sure the object have all the valid keys
     # keys = resources[0].keys()
@@ -220,6 +225,7 @@ def dexterity_import(container, resources, object_type, create_new=False):
     container_path = "/".join(container.getPhysicalPath())
 
     # TODO(ivanteoh): Make sure container is either folder or SiteRoot
+    # import pdb; pdb.set_trace()
 
     for resource in resources:
         obj = None
@@ -269,11 +275,32 @@ def dexterity_import(container, resources, object_type, create_new=False):
 
         assert obj.id
 
+        # generate report for csv export
+        key_arg[u"id"] = obj.id
+        report.append[key_arg]
+
     # Later if want to rename
     # api.content.rename(obj=portal["blog"], new_id="old-blog")
     return {"existing_count": existing_count,
             "new_count": new_count,
-            "ignore_count": ignore_count}
+            "ignore_count": ignore_count,
+            "report": report}
+
+
+def export_file(request, result):
+    normalizer = getUtility(IIDNormalizer)
+    random_id = normalizer.normalize(time.time())
+    filename = "export_{0}.{1}".format(random_id, 'csv')
+    with NamedTemporaryFile(mode='wb') as tmpfile:
+        writer = csv.DictWriter(tmpfile, result.keys())
+        # writer.writeheader()
+        writer.writerow(result)
+        tmpfile.seek(0)
+        request.response.setHeader('Content-Type', 'text/csv')
+        request.response.setHeader(
+            'Content-Disposition',
+            'attachment; filename="%s"' % filename)
+        return file(tmpfile.name).read()
 
 terms = [
     schema.vocabulary.SimpleTerm(*value) for value in
@@ -481,7 +508,10 @@ class ImportForm(form.SchemaForm):
                 request=self.request,
                 type="error")
 
-        self.request.response.redirect(self.context.absolute_url())
+        # self.request.response.redirect(self.context.absolute_url())
+
+        # export to csv file
+        return export_file(self.request, import_metadata["report"])
 
     @button.buttonAndHandler(u"Cancel")
     def handleCancel(self, action):
