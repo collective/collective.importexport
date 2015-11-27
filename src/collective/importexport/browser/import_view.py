@@ -205,6 +205,12 @@ def dexterity_import(container, resources, object_type, create_new=False):
             "new_count": new_count,
             "ignore_count": ignore_count}
 
+terms = [
+    schema.vocabulary.SimpleTerm(*value) for value in
+    [("A", "A", "A"), ("B", "B", "B"),
+     ("C", "C", "C"), ("D", "D", "D")]]
+vocabularies = schema.vocabulary.SimpleVocabulary(terms)
+
 
 class IImportSchema(form.Schema):
     """Define fields used on the form."""
@@ -218,6 +224,30 @@ class IImportSchema(form.Schema):
             default=u"In CSV format."),
         required=True
     )
+    import_columns = schema.List(
+        title=_(
+            "import_field_import_columns_title",  # nopep8
+            default=u"Import Columns"),
+        description=_(
+            "import_field_import_columns_description",  # nopep8
+            default=u"The order of these columns will match with "
+                    u"the object fields below."),
+        value_type=schema.Choice(
+            values=("A", "B", "C", "D")),
+        default=["D", "B"]
+    )
+    primary_key = schema.Choice(
+        title=_(
+            "import_field_primary_key_title",  # nopep8
+            default=u"Primary Key"),
+        description=_(
+            "import_field_primary_key_description",
+            default=u"Select one of the column name as primary key, "
+                    u"which will used as ID when creation or "
+                    u"finding existing objects."),
+        vocabulary=vocabularies,
+        required=True
+    )
     object_type = schema.Choice(
         title=_(
             "import_field_object_type_title",  # nopep8
@@ -229,6 +259,18 @@ class IImportSchema(form.Schema):
                     u"importing from the file."),
         vocabulary='plone.app.vocabularies.ReallyUserFriendlyTypes',
         required=True
+    )
+    object_fields = schema.List(
+        title=_(
+            "import_field_object_fields_title",  # nopep8
+            default=u"Object Fields"),
+        description=_(
+            "import_field_object_fields_description",  # nopep8
+            default=u"The order of these fields will match with "
+                    u"import columns above."),
+        value_type=schema.Choice(
+            values=(1, 2, 3, 4)),
+        default=[1, 3]
     )
     create_new = schema.Bool(
         title=_(
