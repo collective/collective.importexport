@@ -32,9 +32,6 @@ import time
 
 log = logging.getLogger(__name__)
 KEY_ID = u"_id"
-# TODO(ivanteoh): user will pick a types.
-CREATION_TYPE = "Document"
-# CREATION_TYPE = "WildcardVideo"
 
 # TODO(ivanteoh): user will pick a PRIMARY_KEY from column name.
 PRIMARY_KEY = "IAID"
