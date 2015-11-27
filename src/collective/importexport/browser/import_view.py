@@ -34,7 +34,7 @@ log = logging.getLogger(__name__)
 KEY_ID = u"_id"
 
 # TODO(ivanteoh): user will pick a PRIMARY_KEY from column name.
-PRIMARY_KEY = "IAID"
+PRIMARY_KEY = "Filename"
 
 # TODO(ivanteoh): convert to import config option (csv_col, obj_field)
 matching_fields = {
