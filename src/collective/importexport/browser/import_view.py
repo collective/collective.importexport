@@ -14,6 +14,7 @@ from zope.component import getUtility
 from zope.event import notify
 from zope.i18n import translate
 from zope.lifecycleevent import ObjectModifiedEvent
+from zope import schema
 
 import csv
 import logging
@@ -48,8 +49,8 @@ def get_portal_types(request, all=True):
     :returns: Dexterity content types
     :rtype: List
     """
-    catalog = api.portal.get_tool('portal_catalog')
-    portal_types = api.portal.get_tool('portal_types')
+    catalog = api.portal.get_tool("portal_catalog")
+    portal_types = api.portal.get_tool("portal_types")
     results = []
     for fti in portal_types.listTypeInfo():
         if not IDexterityFTI.providedBy(fti):
@@ -57,20 +58,26 @@ def get_portal_types(request, all=True):
         number = len(catalog(portal_type=fti.id))
         if number >= 1 or all:
             results.append({
-                'number': number,
-                'type': fti.id,
-                'title': translate(
-                    fti.title, domain='plone', context=request)
+                "number": number,
+                "type": fti.id,
+                "title": translate(
+                    fti.title, domain="plone", context=request)
             })
-    return sorted(results, key=itemgetter('title'))
+    return sorted(results, key=itemgetter("title"))
 
 
 def get_schema_info(portal_type):
-    """Get a flat list of all fields in all schemas for a content-type."""
+    """Get a flat list of all fields in all schemas for a content-type.
+
+    :param data: Dexterity content type
+    :type obj: String
+    :returns: All fields on this object
+    :rtype: List
+    """
     fields = []
-    for schema in iterSchemataForType(portal_type):
-        for fieldname in schema:
-            fields.append((fieldname, schema.get(fieldname)))
+    for schema_items in iterSchemataForType(portal_type):
+        for fieldname in schema_items:
+            fields.append((fieldname, schema_items.get(fieldname)))
     return fields
 
 
@@ -122,20 +129,23 @@ def process_file(data, mappings, primary_key):
     return rows
 
 
-def dexterity_import(container, resources, creation_type):
+def dexterity_import(container, resources, creation_type, create_new=False):
     """Import to dexterity-types from file to container."""
     new_count = 0
     existing_count = 0
+    ignore_count = 0
 
     if not resources:
-        return {"existing_count": existing_count, "new_count": new_count}
+        return {"existing_count": existing_count,
+                "new_count": new_count,
+                "ignore_count": ignore_count}
 
     # TODO(ivanteoh): Make sure the object have all the valid keys
     # keys = resources[0].keys()
     # hasProperty, getProperty not working
 
     catalog = api.portal.get_tool(name="portal_catalog")
-    container_path = '/'.join(container.getPhysicalPath())
+    container_path = "/".join(container.getPhysicalPath())
 
     # TODO(ivanteoh): Make sure container is either folder or SiteRoot
 
@@ -159,7 +169,7 @@ def dexterity_import(container, resources, creation_type):
         # find existing obj
         results = catalog(
             portal_type=creation_type,
-            path={'query': container_path, 'depth': 1},
+            path={"query": container_path, "depth": 1},
             id=id_key
         )
 
@@ -171,7 +181,7 @@ def dexterity_import(container, resources, creation_type):
             # TODO(ivanteoh): any performance risk by calling this?
             notify(ObjectModifiedEvent(obj))
             existing_count += 1
-        else:
+        elif create_new:
             # Save the objects in this container
             obj = api.content.create(
                 type=creation_type,
@@ -181,23 +191,37 @@ def dexterity_import(container, resources, creation_type):
                 **key_arg
             )
             new_count += 1
+        else:
+            ignore_count += 1
+            continue
 
         assert obj.id
 
     # Later if want to rename
-    # api.content.rename(obj=portal['blog'], new_id='old-blog')
-    return {"existing_count": existing_count, "new_count": new_count}
+    # api.content.rename(obj=portal["blog"], new_id="old-blog")
+    return {"existing_count": existing_count,
+            "new_count": new_count,
+            "ignore_count": ignore_count}
 
 
 class IImportSchema(form.Schema):
     """Define fields used on the form."""
 
     import_file = NamedFile(
-        title=_("import_field_file_title",  # nopep8
+        title=_("import_field_import_file_title",  # nopep8
                 default=u"Import File"),
-        description=_("import_field_file_description",  # nopep8
+        description=_("import_field_import_file_description",  # nopep8
                       default=u"In CSV format."),
-        required=True)
+        required=True
+    )
+    create_new = schema.Bool(
+        title=_("import_field_create_new_title",  # nopep8
+                default=u"Create New"),
+        description=_("import_field_create_new_description",  # nopep8
+                      default=u"""It will create new object if doesn't exist
+                      based from the primary key.
+                      Or else it will be ignored."""),
+    )
 
 
 class ImportForm(form.SchemaForm):
@@ -256,6 +280,7 @@ class ImportForm(form.SchemaForm):
             return False
 
         import_file = data["import_file"]
+        create_new = data["create_new"]
 
         if import_file:
 
@@ -280,20 +305,24 @@ class ImportForm(form.SchemaForm):
             import_metadata = dexterity_import(
                 self.context,
                 rows,
-                CREATION_TYPE
+                CREATION_TYPE,
+                create_new
             )
 
             existing_count = import_metadata["existing_count"]
             new_count = import_metadata["new_count"]
-            {"existing_count": existing_count, "new count": new_count}
+            ignore_count = import_metadata["ignore_count"]
 
             api.portal.show_message(
                 message=_("import_message_csv_info",  # nopep8
-                    default=u"""${new_num} items added
-                        and ${existing_num} items updated from ${filename}""",
-                    mapping={'new_num': new_count,
-                        'existing_num': existing_count,
-                        'filename': file_name}),
+                    default=u"""${new_num} items added,
+                        ${existing_num} items updated and
+                        ${ignore_num} items not added
+                        from ${filename}""",
+                    mapping={"new_num": new_count,
+                        "existing_num": existing_count,
+                        "ignore_num": ignore_count,
+                        "filename": file_name}),
                 request=self.request,
                 type="info")
 
@@ -306,7 +335,7 @@ class ImportForm(form.SchemaForm):
 
         self.request.response.redirect(self.context.absolute_url())
 
-    @button.buttonAndHandler(u'Cancel')
+    @button.buttonAndHandler(u"Cancel")
     def handleCancel(self, action):
         api.portal.show_message(
             message=_("import_message_cancel",  # nopep8
