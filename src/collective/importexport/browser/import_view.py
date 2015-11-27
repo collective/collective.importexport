@@ -15,20 +15,12 @@ from plone.namedfile.field import NamedFile
 from plone.z3cform.layout import wrap_form
 from Products.CMFPlone.utils import safe_unicode
 from z3c.form import button
-<<<<<<< HEAD
-from z3c.form import field
-from z3c.form import form
 from zope.interface import Interface, directlyProvides
 from zope import schema
-
-# from zope import schema
-=======
 from zope.component import getUtility
 from zope.event import notify
 from zope.i18n import translate
 from zope.lifecycleevent import ObjectModifiedEvent
-from zope import schema
->>>>>>> 9c91277d78290a9a43a4c37c8b7ab24f3e9ee082
 
 import csv
 import logging
@@ -141,8 +133,8 @@ def process_file(data, mappings, primary_key):
                 fields[mappings[key].decode("utf-8")] = \
                     value.decode("utf-8")
         rows.append(fields)
+    return rows
 
-<<<<<<< HEAD
 
 def fields_list(context):
     terms = []
@@ -183,25 +175,6 @@ directlyProvides(headers_list, IContextSourceBinder)
 #class MyNamedFileFieldWidget(NamedFileFieldWidget):
 
 
-class IImportSchema(Interface):
-    """Import settings."""
-=======
-    return rows
->>>>>>> 9c91277d78290a9a43a4c37c8b7ab24f3e9ee082
-
-
-<<<<<<< HEAD
-#    form.widget('header_mapping', NamedFileFieldWidget)
-    header_mapping = schema.Dict(
-        title=_(u'Header Mapping'),
-        description=_(u"Any matching headers in your CSV will be mapped to "
-                      u"these fields"),
-        key_type=schema.TextLine(title=u"header"),
-        value_type=schema.Choice(source=fields_list, title=u"field"),
-        #default={'table th td': 'width height'},
-        missing_value={},
-        required=False)
-
 
 read_headers = u"""
   function(evt) {
@@ -228,7 +201,6 @@ read_headers = u"""
 """
 
 
-=======
 def dexterity_import(container, resources, object_type, create_new=False):
     """Import to dexterity-types from file to container."""
     new_count = 0
@@ -302,13 +274,14 @@ def dexterity_import(container, resources, object_type, create_new=False):
     return {"existing_count": existing_count,
             "new_count": new_count,
             "ignore_count": ignore_count}
->>>>>>> 9c91277d78290a9a43a4c37c8b7ab24f3e9ee082
 
 terms = [
     schema.vocabulary.SimpleTerm(*value) for value in
     [("A", "A", "A"), ("B", "B", "B"),
      ("C", "C", "C"), ("D", "D", "D")]]
 vocabularies = schema.vocabulary.SimpleVocabulary(terms)
+
+
 
 
 class IImportSchema(form.Schema):
@@ -323,6 +296,16 @@ class IImportSchema(form.Schema):
             default=u"In CSV format."),
         required=True
     )
+#    form.widget('header_mapping', NamedFileFieldWidget)
+    header_mapping = schema.Dict(
+        title=_(u'Header Mapping'),
+        description=_(u"Any matching headers in your CSV will be mapped to "
+                      u"these fields"),
+        key_type=schema.TextLine(title=u"header"),
+        value_type=schema.Choice(source=fields_list, title=u"field"),
+        #default={'table th td': 'width height'},
+        missing_value={},
+        required=False)
     import_columns = schema.List(
         title=_(
             "import_field_import_columns_title",  # nopep8
@@ -397,14 +380,11 @@ class ImportForm(form.SchemaForm):
     description = _("import_form_description",  # nopep8
                     default=u"Import data to dexterity-types objects.")
 
-    def updateWidgets(self):
-        super(ImportForm, self).updateWidgets()
 
     def save_data(self, data):
         # TODO(ivanteoh): save date using Annotation Adapter
         pass
 
-<<<<<<< HEAD
     def updateWidgets(self):
         # TODO: Maybe here take the header from the request and use it to set
         # defaults on the header_mapping.
@@ -412,8 +392,6 @@ class ImportForm(form.SchemaForm):
         super(ImportForm, self).updateWidgets()
         self.widgets['import_file'].onselect = u"alert('got this');"
 
-=======
->>>>>>> 9c91277d78290a9a43a4c37c8b7ab24f3e9ee082
     @button.buttonAndHandler(_("import_button_save", default=u"Save"))  # nopep8
     def handleSave(self, action):
         """Create and handle form button "Save"."""
