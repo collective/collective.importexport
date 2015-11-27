@@ -5,7 +5,7 @@ from plone import api
 from plone.dexterity.interfaces import IDexterityFTI
 from plone.dexterity.utils import iterSchemataForType
 from plone.directives import form
-from plone.i18n.normalizer.interfaces import IIDNormalizer
+from plone.i18n.normalizer.interfaces import IURLNormalizer
 from plone.namedfile.field import NamedFile
 from plone.z3cform.layout import wrap_form
 from Products.CMFPlone.utils import safe_unicode
@@ -16,10 +16,15 @@ from zope.i18n import translate
 import csv
 import logging
 import StringIO
-import time
 
 log = logging.getLogger(__name__)
 KEY_ID = u"_id"
+# TODO(ivanteoh): user will pick a types.
+CREATION_TYPE = "Document"
+# CREATION_TYPE = "WildcardVideo"
+
+# TODO(ivanteoh): user will pick a PRIMARY_KEY from column name.
+PRIMARY_KEY = "IAID"
 
 # TODO(ivanteoh): convert to import config option (csv_col, obj_field)
 matching_fields = {
@@ -34,6 +39,12 @@ matching_fields = {
 def get_portal_types(request, all=True):
     """A list with info on all dexterity content types with existing items.
 
+    :param request: Request for translation
+    :type obj: Request object
+    :param all: True for including all Dexterity content types
+    :type obj: Boolean
+    :returns: Dexterity content types
+    :rtype: List
     """
     catalog = api.portal.get_tool('portal_catalog')
     portal_types = api.portal.get_tool('portal_types')
@@ -72,14 +83,18 @@ def _get_prop(prop, item, default=None):
 def process_file(data, mappings, primary_key):
     """Process the file and return all the values.
 
-    @param data: file content.
-
-    @param mappings: map field name with column name.
+    :param data: File content
+    :type obj: String
+    :param mappings: Map field name with column name
+    :type obj: Dictionary
+    :returns: All items with matching field object name
+    :rtype: List
     """
     io = StringIO.StringIO(data)
     reader = csv.DictReader(io, delimiter=",", dialect="excel", quotechar='"')
     rows = []
-    normalizer = getUtility(IIDNormalizer)
+    # use IURLNormalizer instead of IIDNormalizer for url id
+    normalizer = getUtility(IURLNormalizer)
 
     # return only fields are needed.
     for row in reader:
@@ -90,6 +105,7 @@ def process_file(data, mappings, primary_key):
             continue
 
         key_value = row[primary_key].decode("utf-8")
+        # http://docs.plone.org/develop/plone/misc/normalizing_ids.html
         # Normalizers to safe ids
         fields[KEY_ID] = normalizer.normalize(key_value)
 
@@ -106,10 +122,11 @@ def process_file(data, mappings, primary_key):
 
 def dexterity_import(container, resources, creation_type):
     """Import to dexterity-types from file to container."""
-    count = 0
+    new_count = 0
+    existing_count = 0
 
     if not resources:
-        return {"count": count}
+        return {"existing_count": existing_count, "new_count": new_count}
 
     # TODO(ivanteoh): Make sure the object have all the valid keys
     # keys = resources[0].keys()
@@ -119,13 +136,24 @@ def dexterity_import(container, resources, creation_type):
     container_path = '/'.join(container.getPhysicalPath())
 
     # TODO(ivanteoh): Make sure container is either folder or SiteRoot
+    # import pdb; pdb.set_trace()
 
     for resource in resources:
         obj = None
 
+        # should not have u"id" in the dictionary
+        assert u"id" not in resource
+        assert u"type" not in resource
+        assert u"container" not in resource
+        assert u"safe_id" not in resource
+
         # must have either u"id" or u"title"
         # primary_key value will be used as id
         id_key = resource[KEY_ID]
+
+        key_arg = dict(resource)
+        if KEY_ID in key_arg:
+            del key_arg[KEY_ID]
 
         # find existing obj
         results = catalog(
@@ -137,39 +165,27 @@ def dexterity_import(container, resources, creation_type):
         # TODO(ivanteoh): must have title when create object.
         # if not the folder content show empty titles
 
-        if not results:
+        if results:
+            obj = results[0].getObject()
+            for key, value in key_arg.items():
+                setattr(obj, key, value)
+            existing_count += 1
+        else:
             # Save the objects in this container
             obj = api.content.create(
                 type=creation_type,
                 id=id_key,
                 container=container,
-                safe_id=True
+                safe_id=True,
+                **key_arg
             )
-
-        else:
-            obj = results[0].getObject()
-
-        # http://docs.plone.org/develop/plone/misc/normalizing_ids.html
-        # not enter here either
-        if not obj:
-            obj = api.content.create(
-                type=creation_type,
-                id=time.time(),
-                container=container,
-                safe_id=True
-            )
+            new_count += 1
 
         assert obj.id
 
-        for key, value in resource.items():
-            if key != KEY_ID or key != u"id":
-                setattr(obj, key, value)
-
-        count += 1
-
     # Later if want to rename
     # api.content.rename(obj=portal['blog'], new_id='old-blog')
-    return {"count": count}
+    return {"existing_count": existing_count, "new_count": new_count}
 
 
 class IImportSchema(form.Schema):
@@ -252,33 +268,31 @@ class ImportForm(form.SchemaForm):
             dx_types = get_portal_types(self.request)
             log.debug(dx_types)
 
-            # TODO(ivanteoh): user will pick a types.
-            # creation_type = "Document"
-            creation_type = "WildcardVideo"
-
-            # TODO(ivanteoh): user will pick a primary_key.
-            primary_key = "Filename"
-
             # based from the types, display all the fields
-            fields = get_schema_info(creation_type)
+            fields = get_schema_info(CREATION_TYPE)
             log.debug(fields)
 
             # based from the matching fields, get all the values.
-            rows = process_file(file_resource, matching_fields, primary_key)
+            rows = process_file(file_resource, matching_fields, PRIMARY_KEY)
             log.debug(rows)
 
             import_metadata = dexterity_import(
                 self.context,
                 rows,
-                creation_type
+                CREATION_TYPE
             )
 
-            count = import_metadata["count"]
+            existing_count = import_metadata["existing_count"]
+            new_count = import_metadata["new_count"]
+            {"existing_count": existing_count, "new count": new_count}
 
             api.portal.show_message(
                 message=_("import_message_csv_info",  # nopep8
-                    default=u"${num} items imported from ${filename}",
-                    mapping={'num': count, 'filename': file_name}),
+                    default=u"""${new_num} items added
+                        and ${existing_num} items updated from ${filename}""",
+                    mapping={'new_num': new_count,
+                        'existing_num': existing_count,
+                        'filename': file_name}),
                 request=self.request,
                 type="info")
 
