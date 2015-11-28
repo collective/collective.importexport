@@ -304,33 +304,34 @@ class IImportSchema(form.Schema):
                       u"these fields"),
         key_type=schema.TextLine(title=u"header"),
         value_type=schema.Choice(source=fields_list, title=u"field"),
-        #default={'table th td': 'width height'},
+        default=matching_fields,
         missing_value={},
         required=False)
-    import_columns = schema.List(
-        title=_(
-            "import_field_import_columns_title",  # nopep8
-            default=u"Import Columns"),
-        description=_(
-            "import_field_import_columns_description",  # nopep8
-            default=u"The order of these columns will match with "
-                    u"the object fields below."),
-        value_type=schema.Choice(
-            values=("A", "B", "C", "D")),
-        default=["D", "B"]
-    )
+    #import_columns = schema.List(
+    #    title=_(
+    #        "import_field_import_columns_title",  # nopep8
+    #        default=u"Import Columns"),
+    #    description=_(
+    #        "import_field_import_columns_description",  # nopep8
+    #        default=u"The order of these columns will match with "
+    #                u"the object fields below."),
+    #    value_type=schema.Choice(
+    #        values=("A", "B", "C", "D")),
+    #    default=["D", "B"]
+    #)
     primary_key = schema.Choice(
         title=_(
             "import_field_primary_key_title",  # nopep8
             default=u"Primary Key"),
         description=_(
             "import_field_primary_key_description",
-            default=u"Select one of the column name as primary key, "
-                    u"which will used as ID when creation or "
-                    u"finding existing objects."),
+            default=u"Field to use to check if content already exists"
+            ),
         vocabulary=vocabularies,
         required=True
     )
+    #TODO: should be not_found_action: Skip, Stop, Stop and rollback, ... or content type to create.
+    # then you don't create_new bool
     object_type = schema.Choice(
         title=_(
             "import_field_object_type_title",  # nopep8
@@ -343,18 +344,18 @@ class IImportSchema(form.Schema):
         vocabulary='plone.app.vocabularies.ReallyUserFriendlyTypes',
         required=True
     )
-    object_fields = schema.List(
-        title=_(
-            "import_field_object_fields_title",  # nopep8
-            default=u"Object Fields"),
-        description=_(
-            "import_field_object_fields_description",  # nopep8
-            default=u"The order of these fields will match with "
-                    u"import columns above."),
-        value_type=schema.Choice(
-            values=(1, 2, 3, 4)),
-        default=[1, 3]
-    )
+    #object_fields = schema.List(
+    #    title=_(
+    #        "import_field_object_fields_title",  # nopep8
+    #        default=u"Object Fields"),
+    #    description=_(
+    #        "import_field_object_fields_description",  # nopep8
+    #        default=u"The order of these fields will match with "
+    #                u"import columns above."),
+    #    value_type=schema.Choice(
+    #        values=(1, 2, 3, 4)),
+    #    default=[1, 3]
+    #)
     create_new = schema.Bool(
         title=_(
             "import_field_create_new_title",  # nopep8
@@ -365,6 +366,16 @@ class IImportSchema(form.Schema):
                     u"based from the primary key. "
                     u"Or else it will be ignored."),
     )
+
+    result_as_csv = schema.Bool(
+        title=_(
+            "csv_report",  # nopep8
+            default=u"Report as CSV"),
+        description=_(
+            "csv_report_description",  # nopep8
+            default=u"return a CSV with urls of imported content"),
+    )
+
 
 
 class ImportForm(form.SchemaForm):
@@ -386,12 +397,20 @@ class ImportForm(form.SchemaForm):
         # TODO(ivanteoh): save date using Annotation Adapter
         pass
 
+    #@property
+    #def fields(self):
+    #    # here we override update schema based on property type
+    #    fields = field.Fields(self._select_field())
+
     def updateWidgets(self):
         # TODO: Maybe here take the header from the request and use it to set
         # defaults on the header_mapping.
+        if self.request.get('csv_header'):
+            default = dict([(col, '') for col in self.request.get('csv_header').split(',')])
+            self.fields["header_mapping"].field.default == default
 
         super(ImportForm, self).updateWidgets()
-        self.widgets['import_file'].onselect = u"alert('got this');"
+        #self.widgets['import_file'].onchange = u"reload_header_mapping(this)"
 
     @button.buttonAndHandler(_("import_button_save", default=u"Save"))  # nopep8
     def handleSave(self, action):

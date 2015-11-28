@@ -1,0 +1,69 @@
+<html metal:use-macro="context/main_template/macros/master"
+      i18n:domain="sits.reporttool">
+<body>
+
+    <metal:block fill-slot="main">
+
+
+
+
+        <h1 class="documentFirstHeading" tal:content="view/label | nothing" />
+
+        <div id="content-core">
+
+            <div id="form-input">
+                <span tal:replace="structure view/contents" />
+            </div>
+        </div>
+
+        <script>
+  function reload_header_mapping(evt) {
+    var files = evt.target.files; // FileList object
+
+    // files is a FileList of File objects. List some properties.
+    var output = [];
+    for (var i = 0, f; f = files[i]; i++) {
+      // Only process image files.
+      if (!f.type.match('text.*') && !f.type.match('application/csv')) {
+        continue;
+      }
+
+      var reader = new FileReader();
+
+      // Closure to capture the file information.
+      reader.onload = (function(theFile) {
+        return function(e) {
+            text = e.target.result;
+            header = text.slice(0, text.indexOf("\n"));
+            // send header to the server and get updated form
+            var XHR = new XMLHttpRequest();
+            XHR.open("GET", "?csv_header="+header, true);
+            XHR.send();
+            XHR.onload = function (){
+                id = '#formfield-form-widgets-header_mapping'
+                widget = $(XHR.responseText).find(id)
+                if (widget) {
+                    $(id).replaceWith(widget);
+                }
+            };
+        };
+      })(f);
+
+      // Read in the image file as a data URL.
+      reader.readAsText(f);
+    }
+
+    // now read the first line of the file.
+    // do an AJAX call sending header
+    // AJAX will return a new form. extract out new header_mapping. This will
+    // now have defaults for all the headers.
+    // replace the old header_mapping widget with the new one
+  };
+  $("#form-widgets-import_file-input").change(reload_header_mapping);
+
+</script>
+
+    </metal:block>
+
+</body>
+</html>
