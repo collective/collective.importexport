@@ -15,7 +15,6 @@ from plone.i18n.normalizer.interfaces import IURLNormalizer
 from plone.namedfile.field import NamedFile
 from plone.z3cform.layout import wrap_form
 from Products.CMFPlone.utils import safe_unicode
-from tempfile import NamedTemporaryFile
 from z3c.form import button
 from zope.interface import Interface, directlyProvides
 from zope import schema
@@ -32,12 +31,9 @@ import time
 
 log = logging.getLogger(__name__)
 KEY_ID = u"_id"
-# TODO(ivanteoh): user will pick a types.
-CREATION_TYPE = "Document"
-# CREATION_TYPE = "WildcardVideo"
 
 # TODO(ivanteoh): user will pick a PRIMARY_KEY from column name.
-PRIMARY_KEY = "IAID"
+PRIMARY_KEY = "Filename"
 
 # TODO(ivanteoh): convert to import config option (csv_col, obj_field)
 matching_fields = {
@@ -47,6 +43,16 @@ matching_fields = {
     "IAID": u"iaid",
     "Citable Reference": u"citable_reference",
 }
+
+# TODO(ivanteoh): convert to export config option
+output_orders = [
+    (u"id", u"ID"),
+    (u"title", u"Title"),
+    (u"description", u"Description"),
+    (u"filename", u"Filename"),
+    (u"iaid", u"IAID"),
+    (u"citable_reference", u"Citable Reference"),
+]
 
 
 def get_portal_types(request, all=True):
@@ -251,7 +257,7 @@ def dexterity_import(container, resources, object_type, create_new=False):
 
         # generate report for csv export
         key_arg[u"id"] = obj.id
-        report.append[key_arg]
+        report.append(key_arg)
 
     # Later if want to rename
     # api.content.rename(obj=portal["blog"], new_id="old-blog")
@@ -261,20 +267,25 @@ def dexterity_import(container, resources, object_type, create_new=False):
             "report": report}
 
 
-def export_file(request, result):
+def export_file(result):
+    if not result:
+        return None
+
     normalizer = getUtility(IIDNormalizer)
     random_id = normalizer.normalize(time.time())
-    filename = "export_{0}.{1}".format(random_id, 'csv')
-    with NamedTemporaryFile(mode='wb') as tmpfile:
-        writer = csv.DictWriter(tmpfile, result.keys())
-        # writer.writeheader()
-        writer.writerow(result)
-        tmpfile.seek(0)
-        request.response.setHeader('Content-Type', 'text/csv')
-        request.response.setHeader(
-            'Content-Disposition',
-            'attachment; filename="%s"' % filename)
-        return file(tmpfile.name).read()
+    file_name = "export_{0}.{1}".format(random_id, 'csv')
+    csv_file = StringIO.StringIO()
+    columns = [key for key, value in output_orders]
+    csv_file.write(','.join(columns) + '\n')
+    for row in result:
+        items = []
+        for column in columns:
+            items.append(row[column])
+        log.debug(items)
+        csv_file.write(','.join(items) + '\n')
+    csv_attachment = csv_file.getvalue()
+    csv_file.close()
+    return (file_name, csv_attachment)
 
 terms = [
     schema.vocabulary.SimpleTerm(*value) for value in
@@ -344,18 +355,6 @@ class IImportSchema(form.Schema):
         vocabulary='plone.app.vocabularies.ReallyUserFriendlyTypes',
         required=True
     )
-    #object_fields = schema.List(
-    #    title=_(
-    #        "import_field_object_fields_title",  # nopep8
-    #        default=u"Object Fields"),
-    #    description=_(
-    #        "import_field_object_fields_description",  # nopep8
-    #        default=u"The order of these fields will match with "
-    #                u"import columns above."),
-    #    value_type=schema.Choice(
-    #        values=(1, 2, 3, 4)),
-    #    default=[1, 3]
-    #)
     create_new = schema.Bool(
         title=_(
             "import_field_create_new_title",  # nopep8
@@ -501,10 +500,18 @@ class ImportForm(form.SchemaForm):
                 request=self.request,
                 type="error")
 
-        # self.request.response.redirect(self.context.absolute_url())
-
         # export to csv file
-        return export_file(self.request, import_metadata["report"])
+        # import pdb; pdb.set_trace()
+        # filename, attachment = export_file(import_metadata["report"])
+        # log.debug(filename)
+        # log.debug(attachment)
+        # self.request.response.setHeader('content-type', 'text/csv')
+        # self.request.response.setHeader(
+        #    'Content-Disposition',
+        #    'attachment; filename="%s"' % filename)
+        # self.request.response.setBody(attachment)
+
+        self.request.response.redirect(self.context.absolute_url())
 
     @button.buttonAndHandler(u"Cancel")
     def handleCancel(self, action):
