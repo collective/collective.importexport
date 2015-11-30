@@ -62,6 +62,12 @@
   $("#form-widgets-import_file-input").change(reload_header_mapping);
 
 </script>
+        <!--<style>-->
+            <!--.multi-widget multi-widget-checkbox checkbox-widget {-->
+                <!--float:left;-->
+            <!--}-->
+            <!---->
+        <!--</style>-->
 
     </metal:block>
 

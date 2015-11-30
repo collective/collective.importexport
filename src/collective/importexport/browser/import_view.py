@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
+from Products.CMFCore.interfaces import IFolderish
 from Products.CMFPlone.interfaces import ISelectableConstrainTypes, IConstrainTypes
 from plone.dexterity.utils import iterSchemataForType
 from plone.formwidget.namedfile import NamedFileFieldWidget
+from z3c.form.interfaces import NO_VALUE
+from zope.schema._bootstrapinterfaces import IContextAwareDefaultFactory
 from zope.schema.interfaces import IContextSourceBinder
 from zope.schema.vocabulary import SimpleVocabulary
 from collective.importexport import _
@@ -16,13 +19,14 @@ from plone.namedfile.field import NamedFile
 from plone.z3cform.layout import wrap_form
 from Products.CMFPlone.utils import safe_unicode
 from z3c.form import button
-from zope.interface import Interface, directlyProvides
+from zope.interface import Interface, directlyProvides, provider
 from zope import schema
 from zope.component import getUtility
 from zope.event import notify
 from zope.i18n import translate
 from zope.lifecycleevent import ObjectModifiedEvent
 from Products.Five.browser.pagetemplatefile import ViewPageTemplateFile as FiveViewPageTemplateFile
+from collective.z3cform.datagridfield import DataGridFieldFactory, DictRow
 
 import csv
 import logging
@@ -37,11 +41,11 @@ PRIMARY_KEY = "Filename"
 
 # TODO(ivanteoh): convert to import config option (csv_col, obj_field)
 matching_fields = {
-    "Filename": u"filename",
-    "Title": u"title",
-    "Summary": u"description",
-    "IAID": u"iaid",
-    "Citable Reference": u"citable_reference",
+    u"Filename": u"filename",
+    u"Title": u"title",
+    u"Summary": u"description",
+    u"IAID": u"iaid",
+    u"Citable Reference": u"citable_reference",
 }
 
 # TODO(ivanteoh): convert to export config option
@@ -152,8 +156,12 @@ def fields_list(context):
     # need to look up all the possible fields we can set on all the content
     # types we might update in the given folder
     found = {}
-    if context is None:
-        return SimpleVocabulary([])
+    terms = [SimpleVocabulary.createTerm('', '', '')]
+    if context is NO_VALUE or not context or not IFolderish.providedBy(context):
+        #return SimpleVocabulary(terms)
+        from zope.globalrequest import getRequest
+        req = getRequest()
+        context = req.PARENTS[0]
 
     #TODO: won't work in the root
     for fti in IConstrainTypes(context).allowedContentTypes():
@@ -170,17 +178,6 @@ def fields_list(context):
     #    terms.append(SimpleVocabulary.createTerm(term, term, term))
     return SimpleVocabulary(terms)
 directlyProvides(fields_list, IContextSourceBinder)
-
-def headers_list(context):
-    """ use the last upload header info from the last uploaded file
-    """
-
-
-    terms = []
-    #for term in ['Slovenia', 'Spain', 'Portugal', 'France']:
-    #    terms.append(SimpleVocabulary.createTerm(term, term, term))
-    return SimpleVocabulary(terms)
-directlyProvides(headers_list, IContextSourceBinder)
 
 
 
@@ -293,7 +290,18 @@ terms = [
      ("C", "C", "C"), ("D", "D", "D")]]
 vocabularies = schema.vocabulary.SimpleVocabulary(terms)
 
+@provider(IContextAwareDefaultFactory)
+def headersFromRequest(context):
+    from zope.globalrequest import getRequest
+    request = getRequest()
+    if request.get('csv_header'):
+        return [dict(header=col, field='') for col in request.get('csv_header').split(',')]
+    else:
+        return []
 
+class IMappingRow(form.Schema):
+    header = schema.TextLine(title=u"header")
+    field = schema.Choice(source=fields_list, title=u"field")
 
 
 class IImportSchema(form.Schema):
@@ -309,27 +317,15 @@ class IImportSchema(form.Schema):
         required=True
     )
 #    form.widget('header_mapping', NamedFileFieldWidget)
-    header_mapping = schema.Dict(
+    header_mapping = schema.List(
         title=_(u'Header Mapping'),
         description=_(u"Any matching headers in your CSV will be mapped to "
                       u"these fields"),
-        key_type=schema.TextLine(title=u"header"),
-        value_type=schema.Choice(source=fields_list, title=u"field"),
-        default=matching_fields,
+        value_type=DictRow(title=u"tablerow", schema=IMappingRow),
+        defaultFactory=headersFromRequest,
         missing_value={},
         required=False)
-    #import_columns = schema.List(
-    #    title=_(
-    #        "import_field_import_columns_title",  # nopep8
-    #        default=u"Import Columns"),
-    #    description=_(
-    #        "import_field_import_columns_description",  # nopep8
-    #        default=u"The order of these columns will match with "
-    #                u"the object fields below."),
-    #    value_type=schema.Choice(
-    #        values=("A", "B", "C", "D")),
-    #    default=["D", "B"]
-    #)
+
     primary_key = schema.Choice(
         title=_(
             "import_field_primary_key_title",  # nopep8
@@ -396,20 +392,13 @@ class ImportForm(form.SchemaForm):
         # TODO(ivanteoh): save date using Annotation Adapter
         pass
 
-    #@property
-    #def fields(self):
-    #    # here we override update schema based on property type
-    #    fields = field.Fields(self._select_field())
-
     def updateWidgets(self):
-        # TODO: Maybe here take the header from the request and use it to set
-        # defaults on the header_mapping.
-        if self.request.get('csv_header'):
-            default = dict([(col, '') for col in self.request.get('csv_header').split(',')])
-            self.fields["header_mapping"].field.default == default
-
+        self.fields['header_mapping'].widgetFactory = DataGridFieldFactory
+        # get around a bug. not sure whose fault it is.
+        # seems likely is the datagrid field
+        self.fields['header_mapping'].field.bind(self.context)
         super(ImportForm, self).updateWidgets()
-        #self.widgets['import_file'].onchange = u"reload_header_mapping(this)"
+
 
     @button.buttonAndHandler(_("import_button_save", default=u"Save"))  # nopep8
     def handleSave(self, action):
