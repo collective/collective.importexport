@@ -150,36 +150,6 @@ def process_file(data, mappings, primary_key):
     return rows
 
 
-def fields_list(context):
-    terms = []
-
-    # need to look up all the possible fields we can set on all the content
-    # types we might update in the given folder
-    found = {}
-    terms = [SimpleVocabulary.createTerm('', '', '')]
-    if context is NO_VALUE or not context or not IFolderish.providedBy(context):
-        #return SimpleVocabulary(terms)
-        from zope.globalrequest import getRequest
-        req = getRequest()
-        context = req.PARENTS[0]
-
-    #TODO: won't work in the root
-    for fti in IConstrainTypes(context).allowedContentTypes():
-        portal_type = fti.getId()
-        schemas = iterSchemataForType(portal_type)
-        for schema in schemas:
-            for field in schema:
-                if field not in found:
-                    found[field] = 1
-                    terms.append(SimpleVocabulary.createTerm(field, field, field))
-
-
-    #for term in ['Slovenia', 'Spain', 'Portugal', 'France']:
-    #    terms.append(SimpleVocabulary.createTerm(term, term, term))
-    return SimpleVocabulary(terms)
-directlyProvides(fields_list, IContextSourceBinder)
-
-
 
 def dexterity_import(container, resources, object_type, create_new=False):
     """Import to dexterity-types from file to container."""
@@ -290,18 +260,78 @@ terms = [
      ("C", "C", "C"), ("D", "D", "D")]]
 vocabularies = schema.vocabulary.SimpleVocabulary(terms)
 
+
+@provider(IContextSourceBinder)
+def fields_list(context):
+    terms = []
+
+    # need to look up all the possible fields we can set on all the content
+    # types we might update in the given folder
+    found = {}
+    terms = [SimpleVocabulary.createTerm('', '', '')]
+    if context is NO_VALUE or not context or not IFolderish.providedBy(context):
+        #return SimpleVocabulary(terms)
+        from zope.globalrequest import getRequest
+        req = getRequest()
+        for parent in req.PARENTS:
+            if IFolderish.providedBy(parent):
+                context = parent
+                break
+
+    #TODO: won't work in the root
+    for fti in IConstrainTypes(context).allowedContentTypes():
+        portal_type = fti.getId()
+        schemas = iterSchemataForType(portal_type)
+        for schema in schemas:
+            for field in schema:
+                if field not in found:
+                    found[field] = 1
+                    terms.append(SimpleVocabulary.createTerm(field, field, field))
+
+
+    #for term in ['Slovenia', 'Spain', 'Portugal', 'France']:
+    #    terms.append(SimpleVocabulary.createTerm(term, term, term))
+    return SimpleVocabulary(terms)
+
+@provider(IContextSourceBinder)
+def if_not_found_list(context):
+    if context is NO_VALUE or not context or not IFolderish.providedBy(context):
+        #return SimpleVocabulary(terms)
+        from zope.globalrequest import getRequest
+        req = getRequest()
+        context = req.PARENTS[0]
+
+    terms = [SimpleVocabulary.createTerm('__ignore__', '__ignore__', 'Skip'),
+             SimpleVocabulary.createTerm('__stop__', '__stop__', 'Stop')]
+
+
+    for fti in IConstrainTypes(context).allowedContentTypes():
+        portal_type = fti.getId()
+        terms.append(SimpleVocabulary.createTerm(portal_type, portal_type,
+                                                 "Create %s" % fti.title))
+    return SimpleVocabulary(terms)
+
+
+
 @provider(IContextAwareDefaultFactory)
 def headersFromRequest(context):
     from zope.globalrequest import getRequest
     request = getRequest()
+    fields = fields_list(None)
+    rows = []
     if request.get('csv_header'):
-        return [dict(header=col, field='') for col in request.get('csv_header').split(',')]
-    else:
-        return []
+        for col in request.get('csv_header').split(','):
+            matched_field = ''
+            for field in fields:
+                if col.lower() == field.title.lower() or \
+                   col.lower() == field.value.lower():
+                    matched_field = field
+            rows.append(dict(header=col, field=matched_field))
+    return rows
 
 class IMappingRow(form.Schema):
-    header = schema.TextLine(title=u"header")
-    field = schema.Choice(source=fields_list, title=u"field")
+    header = schema.TextLine(title=u"CSV Header")
+    field = schema.Choice(source=fields_list, title=u"Internal Field")
 
 
 class IImportSchema(form.Schema):
@@ -310,10 +340,10 @@ class IImportSchema(form.Schema):
     import_file = NamedFile(
         title=_(
             "import_field_import_file_title",  # nopep8
-            default=u"Import File"),
+            default=u"CSV metadata file"),
         description=_(
             "import_field_import_file_description",  # nopep8
-            default=u"In CSV format."),
+            default=u"CSV file containing rows for each content to create or update"),
         required=True
     )
 #    form.widget('header_mapping', NamedFileFieldWidget)
@@ -329,39 +359,28 @@ class IImportSchema(form.Schema):
     primary_key = schema.Choice(
         title=_(
             "import_field_primary_key_title",  # nopep8
-            default=u"Primary Key"),
+            default=u"Test if content exists using"),
         description=_(
             "import_field_primary_key_description",
             default=u"Field to use to check if content already exists"
             ),
-        vocabulary=vocabularies,
+        source=fields_list, #TODO: should be index not fieldname
         required=True
     )
-    #TODO: should be not_found_action: Skip, Stop, Stop and rollback, ... or content type to create.
-    # then you don't create_new bool
     object_type = schema.Choice(
         title=_(
             "import_field_object_type_title",  # nopep8
-            default=u"Object Type"),
+            default=u"If not found"),
         description=_(
             "import_field_object_type_description",
             default=u"Content type of the import object, "
                     u"which is created or updated when "
                     u"importing from the file."),
-        vocabulary='plone.app.vocabularies.ReallyUserFriendlyTypes',
+        #vocabulary='plone.app.vocabularies.ReallyUserFriendlyTypes',
+        source = if_not_found_list,
+        #TODO: should be only locally addable types
         required=True
     )
-    create_new = schema.Bool(
-        title=_(
-            "import_field_create_new_title",  # nopep8
-            default=u"Create New"),
-        description=_(
-            "import_field_create_new_description",  # nopep8
-            default=u"It will create new object if doesn't exist "
-                    u"based from the primary key. "
-                    u"Or else it will be ignored."),
-    )
-
     result_as_csv = schema.Bool(
         title=_(
             "csv_report",  # nopep8
@@ -385,7 +404,7 @@ class ImportForm(form.SchemaForm):
     label = _("import_form_label",  # nopep8
               default=u"Import")
     description = _("import_form_description",  # nopep8
-                    default=u"Import data to dexterity-types objects.")
+                    default=u"Create or Update content from a CSV")
 
 
     def save_data(self, data):
@@ -400,26 +419,26 @@ class ImportForm(form.SchemaForm):
         super(ImportForm, self).updateWidgets()
 
 
-    @button.buttonAndHandler(_("import_button_save", default=u"Save"))  # nopep8
-    def handleSave(self, action):
-        """Create and handle form button "Save"."""
-
-        # Extract form field values and errors from HTTP request
-        data, errors = self.extractData()
-        if errors:
-            return False
-
-        self.save_data(data)
-
-        api.portal.show_message(
-            message=_("import_message_save",  # nopep8
-                default=u"Import settings saved."),
-            request=self.request,
-            type="info")
-        self.request.response.redirect(self.context.absolute_url())
+    #@button.buttonAndHandler(_("import_button_save", default=u"Import CSV"))  # nopep8
+    #def handleSave(self, action):
+    #    """Create and handle form button "Save"."""
+    #
+    #    # Extract form field values and errors from HTTP request
+    #    data, errors = self.extractData()
+    #    if errors:
+    #        return False
+    #
+    #    self.save_data(data)
+    #
+    #    api.portal.show_message(
+    #        message=_("import_message_save",  # nopep8
+    #            default=u"Import settings saved."),
+    #        request=self.request,
+    #        type="info")
+    #    self.request.response.redirect(self.context.absolute_url())
 
     @button.buttonAndHandler(_("import_button_save_import",  # nopep8
-                               default=u"Save and Import"))
+                               default=u"Import CSV"))
     def handleSaveImport(self, action):
         """Create and handle form button "Save and Import"."""
 
@@ -435,8 +454,12 @@ class ImportForm(form.SchemaForm):
             return False
 
         import_file = data["import_file"]
-        create_new = data["create_new"]
-        object_type = data["object_type"]
+        if data["object_type"] in ['__skip__', '__stop__']:
+            create_new = False
+            object_type = None
+        else:
+            create_new = True
+            object_type = data["object_type"]
 
         if import_file:
 
@@ -453,6 +476,9 @@ class ImportForm(form.SchemaForm):
             # based from the types, display all the fields
             # fields = get_schema_info(CREATION_TYPE)
             # log.debug(fields)
+
+            if data['header_mapping']:
+                matching_fields = dict([(d['header'],d['field']) for d in data['header_mapping']])
 
             # based from the matching fields, get all the values.
             rows = process_file(file_resource, matching_fields, PRIMARY_KEY)
