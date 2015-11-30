@@ -4,6 +4,7 @@ from Products.CMFPlone.interfaces import ISelectableConstrainTypes, IConstrainTy
 from plone.dexterity.utils import iterSchemataForType
 from plone.formwidget.namedfile import NamedFileFieldWidget
 from z3c.form.interfaces import NO_VALUE
+from zope.schema import getFieldsInOrder
 from zope.schema._bootstrapinterfaces import IContextAwareDefaultFactory
 from zope.schema.interfaces import IContextSourceBinder
 from zope.schema.vocabulary import SimpleVocabulary
@@ -111,58 +112,15 @@ def _get_prop(prop, item, default=None):
     return ret
 
 
-def process_file(data, mappings, primary_key):
-    """Process the file and return all the values.
 
-    :param data: File content
-    :type obj: String
-    :param mappings: Map field name with column name
-    :type obj: Dictionary
-    :returns: All items with matching field object name
-    :rtype: List
-    """
-    io = StringIO.StringIO(data)
-    reader = csv.DictReader(io, delimiter=",", dialect="excel", quotechar='"')
-    rows = []
-    # use IURLNormalizer instead of IIDNormalizer for url id
-    normalizer = getUtility(IURLNormalizer)
-
-    # return only fields are needed.
-    for row in reader:
-        fields = {}
-
-        # set primary_key
-        if primary_key not in row:
-            continue
-
-        key_value = row[primary_key].decode("utf-8")
-        # http://docs.plone.org/develop/plone/misc/normalizing_ids.html
-        # Normalizers to safe ids
-        fields[KEY_ID] = normalizer.normalize(key_value)
-
-        for key, value in row.items():
-            if not key:
-                continue
-            if key in mappings:
-                fields[mappings[key].decode("utf-8")] = \
-                    value.decode("utf-8")
-        rows.append(fields)
-    return rows
-
-
-
-def dexterity_import(container, resources, object_type, create_new=False):
+def dexterity_import(container, data, mappings, object_type, create_new=False,
+                     primary_key='id'):
     """Import to dexterity-types from file to container."""
     new_count = 0
     existing_count = 0
     ignore_count = 0
     report = []
 
-    if not resources:
-        return {"existing_count": existing_count,
-                "new_count": new_count,
-                "ignore_count": ignore_count,
-                "report": report}
 
     # TODO(ivanteoh): Make sure the object have all the valid keys
     # keys = resources[0].keys()
@@ -174,31 +132,62 @@ def dexterity_import(container, resources, object_type, create_new=False):
     # TODO(ivanteoh): Make sure container is either folder or SiteRoot
     # import pdb; pdb.set_trace()
 
-    for resource in resources:
+    io = StringIO.StringIO(data)
+    reader = csv.DictReader(io, delimiter=",", dialect="excel", quotechar='"')
+    rows = []
+    if not reader:
+        return {"existing_count": existing_count,
+                "new_count": new_count,
+                "ignore_count": ignore_count,
+                "report": report}
+
+    # use IURLNormalizer instead of IIDNormalizer for url id
+    normalizer = getUtility(IURLNormalizer)
+
+    # return only fields are needed.
+    for row in reader:
+
+        ## set primary_key
+        #if primary_key not in row:
+        #    continue
+
+        #key_value = row[primary_key].decode("utf-8")
+        ## http://docs.plone.org/develop/plone/misc/normalizing_ids.html
+        ## Normalizers to safe ids
+        #fields[KEY_ID] = normalizer.normalize(key_value)
+
+        key_arg = {}
+        for key, value in row.items():
+            if not key:
+                continue
+            if key in mappings:
+                key_arg[mappings[key].decode("utf-8")] = \
+                    value.decode("utf-8")
+
+
         obj = None
 
         # should not have u"id" in the dictionary
-        assert u"id" not in resource
-        assert u"type" not in resource
-        assert u"container" not in resource
-        assert u"safe_id" not in resource
+        #assert u"id" not in resource
+        assert u"type" not in key_arg
+        assert u"container" not in key_arg
+        assert u"safe_id" not in key_arg
 
-        # must have either u"id" or u"title"
-        # primary_key value will be used as id
-        id_key = resource[KEY_ID]
-
-        key_arg = dict(resource)
-        if KEY_ID in key_arg:
-            del key_arg[KEY_ID]
 
         # find existing obj
-        results = catalog(
-            portal_type=object_type,
-            path={"query": container_path, "depth": 1},
-            id=id_key
-        )
+        # TODO: this is wrong since indexs aren't always the same as fields
+        if primary_key in key_arg:
+            query = dict(path={"query": container_path, "depth": 1},
+    #                    portal_type=object_type,
+                         )
+            query[primary_key]=key_arg[primary_key]
+            results = catalog(**query)
+        else:
+            results = []
 
-        if results:
+        if len(results) > 1:
+            assert "Primary key must be unique"
+        elif len(results) == 1:
             obj = results[0].getObject()
             for key, value in key_arg.items():
                 # does not update metadata
@@ -210,7 +199,6 @@ def dexterity_import(container, resources, object_type, create_new=False):
             # Save the objects in this container
             obj = api.content.create(
                 type=object_type,
-                id=id_key,
                 container=container,
                 safe_id=True,
                 **key_arg
@@ -224,6 +212,7 @@ def dexterity_import(container, resources, object_type, create_new=False):
 
         # generate report for csv export
         key_arg[u"id"] = obj.id
+        key_arg[u'url'] = obj.absolute_url()
         report.append(key_arg)
 
     # Later if want to rename
@@ -236,7 +225,7 @@ def dexterity_import(container, resources, object_type, create_new=False):
 
 def export_file(result):
     if not result:
-        return None
+        return None,None
 
     normalizer = getUtility(IIDNormalizer)
     random_id = normalizer.normalize(time.time())
@@ -261,14 +250,7 @@ terms = [
 vocabularies = schema.vocabulary.SimpleVocabulary(terms)
 
 
-@provider(IContextSourceBinder)
-def fields_list(context):
-    terms = []
-
-    # need to look up all the possible fields we can set on all the content
-    # types we might update in the given folder
-    found = {}
-    terms = [SimpleVocabulary.createTerm('', '', '')]
+def get_allowed_types(context):
     if context is NO_VALUE or not context or not IFolderish.providedBy(context):
         #return SimpleVocabulary(terms)
         from zope.globalrequest import getRequest
@@ -279,14 +261,32 @@ def fields_list(context):
                 break
 
     #TODO: won't work in the root
-    for fti in IConstrainTypes(context).allowedContentTypes():
+    if IConstrainTypes.providedBy(context):
+        types = IConstrainTypes(context).getImmediatelyAddableTypes()
+    else:
+        types = context.allowedContentTypes()
+    return types
+
+@provider(IContextSourceBinder)
+def fields_list(context):
+    terms = []
+
+    # need to look up all the possible fields we can set on all the content
+    # types we might update in the given folder
+    found = {}
+    terms = [SimpleVocabulary.createTerm('', '', '')]
+
+    for fti in get_allowed_types(context):
         portal_type = fti.getId()
         schemas = iterSchemataForType(portal_type)
         for schema in schemas:
-            for field in schema:
-                if field not in found:
-                    found[field] = 1
-                    terms.append(SimpleVocabulary.createTerm(field, field, field))
+            for fieldid, field in getFieldsInOrder(schema):
+                if fieldid not in found:
+                    found[fieldid] = 1
+                    #title = "%s (%s)" % (_(field.title), fieldid)
+                    title = _(field.title)
+                    terms.append(SimpleVocabulary.createTerm(fieldid, fieldid,
+                                                             title))
 
 
     #for term in ['Slovenia', 'Spain', 'Portugal', 'France']:
@@ -295,17 +295,11 @@ def fields_list(context):
 
 @provider(IContextSourceBinder)
 def if_not_found_list(context):
-    if context is NO_VALUE or not context or not IFolderish.providedBy(context):
-        #return SimpleVocabulary(terms)
-        from zope.globalrequest import getRequest
-        req = getRequest()
-        context = req.PARENTS[0]
-
     terms = [SimpleVocabulary.createTerm('__ignore__', '__ignore__', 'Skip'),
              SimpleVocabulary.createTerm('__stop__', '__stop__', 'Stop')]
 
 
-    for fti in IConstrainTypes(context).allowedContentTypes():
+    for fti in get_allowed_types(context):
         portal_type = fti.getId()
         terms.append(SimpleVocabulary.createTerm(portal_type, portal_type,
                                                  "Create %s" % fti.title))
@@ -322,10 +316,13 @@ def headersFromRequest(context):
     if request.get('csv_header'):
         for col in request.get('csv_header').split(','):
             matched_field = ''
+            if not col.strip():
+                continue
             for field in fields:
                 if col.lower() == field.title.lower() or \
                    col.lower() == field.value.lower():
-                    matched_field = field
+                    matched_field = field.value
+                    break
             rows.append(dict(header=col, field=matched_field))
     return rows
 
@@ -454,79 +451,79 @@ class ImportForm(form.SchemaForm):
             return False
 
         import_file = data["import_file"]
-        if data["object_type"] in ['__skip__', '__stop__']:
+        if data["object_type"] in ['__ignore__', '__stop__']:
             create_new = False
             object_type = None
         else:
             create_new = True
             object_type = data["object_type"]
 
-        if import_file:
-
-            # File upload is not saved in settings
-            file_resource = import_file.data
-            file_name = import_file.filename
-
-            # TODO(ivanteoh): use import_file.contentType to check csv file ext
-
-            # list all the dexterity types
-            dx_types = get_portal_types(self.request)
-            log.debug(dx_types)
-
-            # based from the types, display all the fields
-            # fields = get_schema_info(CREATION_TYPE)
-            # log.debug(fields)
-
-            if data['header_mapping']:
-                matching_fields = dict([(d['header'],d['field']) for d in data['header_mapping']])
-
-            # based from the matching fields, get all the values.
-            rows = process_file(file_resource, matching_fields, PRIMARY_KEY)
-            log.debug(rows)
-
-            import_metadata = dexterity_import(
-                self.context,
-                rows,
-                object_type,
-                create_new
-            )
-
-            existing_count = import_metadata["existing_count"]
-            new_count = import_metadata["new_count"]
-            ignore_count = import_metadata["ignore_count"]
-
-            api.portal.show_message(
-                message=_("import_message_csv_info",  # nopep8
-                    default=u"""${new_num} items added,
-                        ${existing_num} items updated and
-                        ${ignore_num} items not added
-                        from ${filename}""",
-                    mapping={"new_num": new_count,
-                        "existing_num": existing_count,
-                        "ignore_num": ignore_count,
-                        "filename": file_name}),
-                request=self.request,
-                type="info")
-
-        else:
+        if not import_file:
             api.portal.show_message(
                 message=_("import_message_csv_error",  # nopep8
                     default=u"Please provide a csv file."),
                 request=self.request,
                 type="error")
+            return
+
+        # File upload is not saved in settings
+        file_resource = import_file.data
+        file_name = import_file.filename
+
+        # TODO(ivanteoh): use import_file.contentType to check csv file ext
+
+        # list all the dexterity types
+        dx_types = get_portal_types(self.request)
+        log.debug(dx_types)
+
+        # based from the types, display all the fields
+        # fields = get_schema_info(CREATION_TYPE)
+        # log.debug(fields)
+
+        if data['header_mapping']:
+            matching_fields = dict([(d['header'],d['field']) for d in data['header_mapping']])
+
+        # based from the matching fields, get all the values.
+        import_metadata = dexterity_import(
+            self.context,
+            file_resource,
+            matching_fields,
+            object_type,
+            create_new,
+            data["primary_key"]
+        )
+
+        existing_count = import_metadata["existing_count"]
+        new_count = import_metadata["new_count"]
+        ignore_count = import_metadata["ignore_count"]
+
+        api.portal.show_message(
+            message=_("import_message_csv_info",  # nopep8
+                default=u"""${new_num} items added,
+                    ${existing_num} items updated and
+                    ${ignore_num} items skipped
+                    from ${filename}""",
+                mapping={"new_num": new_count,
+                    "existing_num": existing_count,
+                    "ignore_num": ignore_count,
+                    "filename": file_name}),
+            request=self.request,
+            type="info")
+
 
         # export to csv file
         # import pdb; pdb.set_trace()
-        # filename, attachment = export_file(import_metadata["report"])
-        # log.debug(filename)
-        # log.debug(attachment)
-        # self.request.response.setHeader('content-type', 'text/csv')
-        # self.request.response.setHeader(
-        #    'Content-Disposition',
-        #    'attachment; filename="%s"' % filename)
-        # self.request.response.setBody(attachment)
+        if data['result_as_csv'] and import_metadata["report"]:
+            filename, attachment = export_file(import_metadata["report"])
+            log.debug(filename)
+            log.debug(attachment)
+            self.request.response.setHeader('content-type', 'text/csv')
+            self.request.response.setHeader(
+                'Content-Disposition',
+                'attachment; filename="%s"' % filename)
+            self.request.response.setBody(attachment)
 
-        self.request.response.redirect(self.context.absolute_url())
+        #self.request.response.redirect(self.context.absolute_url())
 
     @button.buttonAndHandler(u"Cancel")
     def handleCancel(self, action):
