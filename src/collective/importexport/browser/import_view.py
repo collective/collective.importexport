@@ -196,6 +196,9 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
             obj = results[0].getObject()
             for key, value in key_arg.items():
                 # does not update metadata
+                if key == 'id':
+                    #TODO: handle renaming later
+                    continue
                 setattr(obj, key, value)
             # TODO(ivanteoh): any performance risk by calling this?
             notify(ObjectModifiedEvent(obj))
@@ -241,7 +244,7 @@ def export_file(result, header_mapping):
     writer.writerow(columns)
     for row in result:
         items = []
-        if getattr(row, 'getObject'):
+        if getattr(row, 'getObject', None):
             obj = row.getObject()
         else:
             obj = None
@@ -358,7 +361,7 @@ class IImportSchema(form.Schema):
         description=_(
             "import_field_import_file_description",  # nopep8
             default=u"CSV file containing rows for each content to create or update"),
-        required=True
+        required=False
     )
 #    form.widget('header_mapping', NamedFileFieldWidget)
     header_mapping = schema.List(
@@ -526,13 +529,30 @@ class ImportForm(form.SchemaForm):
             type="info")
 
 
+        self.import_metadata = import_metadata
+        return True
+
+
+    @button.buttonAndHandler(_("import___button_import_export",  # nopep8
+                               default=u"Import and Export Changes"))
+    def handleImportExport(self, action):
+
+        if not self.handleSaveImport(self, action):
+            return False
+
+        data, errors = self.extractData()
+        if errors:
+            return False
+
+        # blank header or field means we don't want it
+        header_mapping = [d for d in data['header_mapping'] if d['field'] and d['header']]
+
+
         # export to csv file
         # import pdb; pdb.set_trace()
-        if data['result_as_csv'] and import_metadata["report"]:
-            filename, attachment = export_file(import_metadata["report"],
+        if self.import_metadata["report"]:
+            filename, attachment = export_file(self.import_metadata["report"],
                                                header_mapping)
-            log.debug(filename)
-            log.debug(attachment)
             self.request.response.setHeader('content-type', 'text/csv')
             self.request.response.setHeader(
                 'Content-Disposition',
@@ -540,11 +560,6 @@ class ImportForm(form.SchemaForm):
             self.request.response.setBody(attachment, lock=True)
 
         #self.request.response.redirect(self.context.absolute_url())
-
-    @button.buttonAndHandler(_("import___button_import_export",  # nopep8
-                               default=u"Import and Export Changes"))
-    def handleImportExport(self, action):
-        pass
 
     @button.buttonAndHandler(_("import___button_export",  # nopep8
                                default=u"CSV Export"))
