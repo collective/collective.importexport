@@ -192,18 +192,23 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
 
         if len(results) > 1:
             assert "Primary key must be unique"
+            continue
         elif len(results) == 1:
             obj = results[0].getObject()
             for key, value in key_arg.items():
                 # does not update metadata
-                if key == 'id':
+                if key == 'id' or key == 'path':
                     #TODO: handle renaming later
                     continue
-                setattr(obj, key, value)
+                #TODO: we should be validating against schemas here
+                elif hasattr(obj,key):
+                    setattr(obj, key, value)
             # TODO(ivanteoh): any performance risk by calling this?
+            #TODO: only do this is we changed somthing
             notify(ObjectModifiedEvent(obj))
             existing_count += 1
         elif create_new:
+            #TODO: handle creating using passed in path. ie find/create folders
             # Save the objects in this container
             obj = api.content.create(
                 type=object_type,
@@ -220,8 +225,8 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
 
         # generate report for csv export
         key_arg[u"id"] = obj.id
-        key_arg[u'url'] = obj.absolute_url()
-        report.append(key_arg)
+        key_arg[u'path'] = obj.absolute_url()
+        report.append(obj)
 
     # Later if want to rename
     # api.content.rename(obj=portal["blog"], new_id="old-blog")
@@ -231,7 +236,7 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
             "report": report}
 
 
-def export_file(result, header_mapping):
+def export_file(result, header_mapping, request):
     if not result:
         return None,None
 
@@ -247,14 +252,19 @@ def export_file(result, header_mapping):
         if getattr(row, 'getObject', None):
             obj = row.getObject()
         else:
-            obj = None
+            obj = row
         for d in header_mapping:
             #TODO: need to get from the objects themselves in case the data
             # has been transformed
             if obj is None:
                 items.append(row[d['field']])
             else:
-                items.append(getattr(obj,d['field']))
+                if d['field'] == 'path':
+                    path = obj.getPhysicalPath()
+                    virtual_path = request.physicalPathToVirtualPath(path)
+                    items.append('/'.join(virtual_path))
+                else:
+                    items.append(getattr(obj,d['field']))
         log.debug(items)
         writer.writerow(items)
     csv_attachment = csv_file.getvalue()
@@ -292,7 +302,9 @@ def fields_list(context):
     # need to look up all the possible fields we can set on all the content
     # types we might update in the given folder
     found = {}
-    terms = [SimpleVocabulary.createTerm('', '', '')]
+    terms = [SimpleVocabulary.createTerm('', '', ''),
+             SimpleVocabulary.createTerm('path', 'path', 'Path')]
+    # path is special and allows us to import to dirs and export resulting path
 
     for fti in get_allowed_types(context):
         portal_type = fti.getId()
@@ -552,7 +564,8 @@ class ImportForm(form.SchemaForm):
         # import pdb; pdb.set_trace()
         if self.import_metadata["report"]:
             filename, attachment = export_file(self.import_metadata["report"],
-                                               header_mapping)
+                                               header_mapping,
+                                               self.request)
             self.request.response.setHeader('content-type', 'text/csv')
             self.request.response.setHeader(
                 'Content-Disposition',
@@ -582,7 +595,7 @@ class ImportForm(form.SchemaForm):
 
         catalog = api.portal.get_tool("portal_catalog")
         results = catalog(**query)
-        filename, attachment = export_file(results, header_mapping)
+        filename, attachment = export_file(results, header_mapping, self.request)
         #log.debug(filename)
         #log.debug(attachment)
         self.request.response.setHeader('content-type', 'text/csv')
