@@ -4,6 +4,7 @@ from Products.CMFPlone.interfaces import ISelectableConstrainTypes, IConstrainTy
 from plone.dexterity.utils import iterSchemataForType
 from plone.formwidget.namedfile import NamedFileFieldWidget
 from z3c.form.interfaces import NO_VALUE
+from zope.i18nmessageid import Message
 from zope.schema import getFieldsInOrder
 from zope.schema._bootstrapinterfaces import IContextAwareDefaultFactory
 from zope.schema.interfaces import IContextSourceBinder
@@ -28,6 +29,7 @@ from zope.i18n import translate
 from zope.lifecycleevent import ObjectModifiedEvent
 from Products.Five.browser.pagetemplatefile import ViewPageTemplateFile as FiveViewPageTemplateFile
 from collective.z3cform.datagridfield import DataGridFieldFactory, DictRow
+from plone.app.contenttypes import _ as PLONE_MESSAGE_FACTORY
 
 import csv
 import logging
@@ -132,8 +134,10 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
     # TODO(ivanteoh): Make sure container is either folder or SiteRoot
     # import pdb; pdb.set_trace()
 
-    io = StringIO.StringIO(data)
-    reader = csv.DictReader(io, delimiter=",", dialect="excel", quotechar='"')
+    reader = csv.DictReader(data.splitlines(),
+                            delimiter=",",
+                            dialect="excel",
+                            quotechar='"')
     rows = []
     if not reader:
         return {"existing_count": existing_count,
@@ -271,12 +275,6 @@ def export_file(result, header_mapping, request):
     csv_file.close()
     return (file_name, csv_attachment)
 
-terms = [
-    schema.vocabulary.SimpleTerm(*value) for value in
-    [("A", "A", "A"), ("B", "B", "B"),
-     ("C", "C", "C"), ("D", "D", "D")]]
-vocabularies = schema.vocabulary.SimpleVocabulary(terms)
-
 
 def get_allowed_types(context):
     if context is NO_VALUE or not context or not IFolderish.providedBy(context):
@@ -288,7 +286,6 @@ def get_allowed_types(context):
                 context = parent
                 break
 
-    #TODO: won't work in the root
     if IConstrainTypes.providedBy(context):
         types = IConstrainTypes(context).getImmediatelyAddableTypes()
     else:
@@ -314,13 +311,15 @@ def fields_list(context):
                 if fieldid not in found:
                     found[fieldid] = 1
                     #title = "%s (%s)" % (_(field.title), fieldid)
-                    title = _(field.title)
+                    #import pdb; pdb.set_trace()
+                    title = PLONE_MESSAGE_FACTORY(field.title)
+                    title = Message(field.title.decode('utf8'), 'plone')
+                    #from zope.i18n import translate
+                    #title = translate(msgid=field.title, domain='plone', target_language='en')
                     terms.append(SimpleVocabulary.createTerm(fieldid, fieldid,
                                                              title))
 
 
-    #for term in ['Slovenia', 'Spain', 'Portugal', 'France']:
-    #    terms.append(SimpleVocabulary.createTerm(term, term, term))
     return SimpleVocabulary(terms)
 
 @provider(IContextSourceBinder)
@@ -337,30 +336,39 @@ def if_not_found_list(context):
 
 
 
+
 @provider(IContextAwareDefaultFactory)
 def headersFromRequest(context):
     from zope.globalrequest import getRequest
     request = getRequest()
     fields = fields_list(None)
+    if not request.get('csv_header'):
+        return []
     rows = []
-    if request.get('csv_header'):
-        #TODO: use csv reader here
-        for col in request.get('csv_header').split(','):
-            matched_field = ''
-            if not col.strip():
-                continue
-            #TODO: try to guess field from header
-            for field in fields:
-                if col.lower() == field.title.lower() or \
-                   col.lower() == field.value.lower():
-                    matched_field = field.value
-                    break
-            rows.append(dict(header=col, field=matched_field))
+    reader = csv.DictReader(request.get('csv_header').splitlines(),
+                            delimiter=",",
+                            dialect="excel",
+                            quotechar='"')
+
+    for col in reader.fieldnames:
+        matched_field = ''
+        col = unicode(col.strip())
+        if not col.strip():
+            continue
+        #TODO: try to guess field from header
+        for field in fields:
+            if col.lower() == field.title.lower() or \
+               col.lower() == field.value.lower():
+                matched_field = field.value
+                break
+        rows.append(dict(header=col, field=matched_field))
     return rows
 
 class IMappingRow(form.Schema):
-    header = schema.TextLine(title=u"CSV Header")
-    field = schema.Choice(source=fields_list, title=u"Internal Field")
+    header = schema.TextLine(title=u"CSV Header", required=False)
+    field = schema.Choice(source=fields_list,
+                          title=u"Internal Field",
+                          required=False)
 
 
 class IImportSchema(form.Schema):
@@ -391,10 +399,12 @@ class IImportSchema(form.Schema):
             default=u"Test if content exists using"),
         description=_(
             "import_field_primary_key_description",
-            default=u"Field to use to check if content already exists"
+            default=u"Field with unique id to use to check if content already exists. "
+            "Normally 'Short Name' or 'Path'."
             ),
         source=fields_list, #TODO: should be index not fieldname
-        required=True
+        required=True,
+        default=u"id"
     )
     object_type = schema.Choice(
         title=_(
@@ -402,12 +412,8 @@ class IImportSchema(form.Schema):
             default=u"If not found"),
         description=_(
             "import_field_object_type_description",
-            default=u"Content type of the import object, "
-                    u"which is created or updated when "
-                    u"importing from the file."),
-        #vocabulary='plone.app.vocabularies.ReallyUserFriendlyTypes',
+            default=u"Action to take if existing content can't be found during import"),
         source = if_not_found_list,
-        #TODO: should be only locally addable types
         required=True
     )
     #result_as_csv = schema.Bool(
@@ -433,7 +439,9 @@ class ImportForm(form.SchemaForm):
     label = _("import_form_label",  # nopep8
               default=u"CSV Import/Export")
     description = _("import_form_description",  # nopep8
-                    default=u"Create or Update content from a CSV")
+                    default=u"Create or Update content from a CSV. "
+    u"For images, files, videos or html documents, use Upload first and use "
+    u"CSV import to set the metadata of the uploaded files.")
 
 
     def save_data(self, data):
@@ -447,24 +455,6 @@ class ImportForm(form.SchemaForm):
         self.fields['header_mapping'].field.bind(self.context)
         super(ImportForm, self).updateWidgets()
 
-
-    #@button.buttonAndHandler(_("import_button_save", default=u"Import CSV"))  # nopep8
-    #def handleSave(self, action):
-    #    """Create and handle form button "Save"."""
-    #
-    #    # Extract form field values and errors from HTTP request
-    #    data, errors = self.extractData()
-    #    if errors:
-    #        return False
-    #
-    #    self.save_data(data)
-    #
-    #    api.portal.show_message(
-    #        message=_("import_message_save",  # nopep8
-    #            default=u"Import settings saved."),
-    #        request=self.request,
-    #        type="info")
-    #    self.request.response.redirect(self.context.absolute_url())
 
     @button.buttonAndHandler(_("import_button_save_import",  # nopep8
                                default=u"CSV Import"))

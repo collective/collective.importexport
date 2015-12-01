@@ -33,8 +33,9 @@
       // Closure to capture the file information.
       reader.onload = (function(theFile) {
         return function(e) {
-            text = e.target.result;
-            header = text.slice(0, text.indexOf("\n"));
+            var text = e.target.result;
+            var lines = text.match(/^.*((\r\n|\n|\r)|$)/gm);
+            var header = lines[0];
             // send header to the server and get updated form
             var XHR = new XMLHttpRequest();
             XHR.open("GET", "?csv_header="+header, true);
