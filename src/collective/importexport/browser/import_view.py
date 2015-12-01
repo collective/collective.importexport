@@ -41,23 +41,23 @@ KEY_ID = u"_id"
 PRIMARY_KEY = "Filename"
 
 # TODO(ivanteoh): convert to import config option (csv_col, obj_field)
-matching_fields = {
-    u"Filename": u"filename",
-    u"Title": u"title",
-    u"Summary": u"description",
-    u"IAID": u"iaid",
-    u"Citable Reference": u"citable_reference",
-}
-
-# TODO(ivanteoh): convert to export config option
-output_orders = [
-    (u"id", u"ID"),
-    (u"title", u"Title"),
-    (u"description", u"Description"),
-    (u"filename", u"Filename"),
-    (u"iaid", u"IAID"),
-    (u"citable_reference", u"Citable Reference"),
-]
+#matching_fields = {
+#    u"Filename": u"filename",
+#    u"Title": u"title",
+#    u"Summary": u"description",
+#    u"IAID": u"iaid",
+#    u"Citable Reference": u"citable_reference",
+#}
+#
+## TODO(ivanteoh): convert to export config option
+#output_orders = [
+#    (u"id", u"ID"),
+#    (u"title", u"Title"),
+#    (u"description", u"Description"),
+#    (u"filename", u"Filename"),
+#    (u"iaid", u"IAID"),
+#    (u"citable_reference", u"Citable Reference"),
+#]
 
 
 def get_portal_types(request, all=True):
@@ -182,6 +182,11 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
                          )
             query[primary_key]=key_arg[primary_key]
             results = catalog(**query)
+            # special case because id gets normalised.
+            # try and guess the normalised id
+            if len(results) == 0 and primary_key == 'id':
+                query[primary_key] = normalizer.normalize(key_arg[primary_key])
+                results = catalog(**query)
         else:
             results = []
 
@@ -223,7 +228,7 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
             "report": report}
 
 
-def export_file(result):
+def export_file(result, header_mapping):
     if not result:
         return None,None
 
@@ -231,12 +236,15 @@ def export_file(result):
     random_id = normalizer.normalize(time.time())
     file_name = "export_{0}.{1}".format(random_id, 'csv')
     csv_file = StringIO.StringIO()
-    columns = [key for key, value in output_orders]
+    columns = [d['header'] for d in header_mapping]
     csv_file.write(','.join(columns) + '\n')
+    import pdb; pdb.set_trace()
     for row in result:
         items = []
-        for column in columns:
-            items.append(row[column])
+        for d in header_mapping:
+            #TODO: need to get from the objects themselves in case the data
+            # has been transformed
+            items.append(row[d['field']])
         log.debug(items)
         csv_file.write(','.join(items) + '\n')
     csv_attachment = csv_file.getvalue()
@@ -314,10 +322,12 @@ def headersFromRequest(context):
     fields = fields_list(None)
     rows = []
     if request.get('csv_header'):
+        #TODO: use csv reader here
         for col in request.get('csv_header').split(','):
             matched_field = ''
             if not col.strip():
                 continue
+            #TODO: try to guess field from header
             for field in fields:
                 if col.lower() == field.title.lower() or \
                    col.lower() == field.value.lower():
@@ -399,7 +409,7 @@ class ImportForm(form.SchemaForm):
 
     # Form label
     label = _("import_form_label",  # nopep8
-              default=u"Import")
+              default=u"CSV Import")
     description = _("import_form_description",  # nopep8
                     default=u"Create or Update content from a CSV")
 
@@ -514,7 +524,8 @@ class ImportForm(form.SchemaForm):
         # export to csv file
         # import pdb; pdb.set_trace()
         if data['result_as_csv'] and import_metadata["report"]:
-            filename, attachment = export_file(import_metadata["report"])
+            filename, attachment = export_file(import_metadata["report"],
+                                               data['header_mapping'])
             log.debug(filename)
             log.debug(attachment)
             self.request.response.setHeader('content-type', 'text/csv')
