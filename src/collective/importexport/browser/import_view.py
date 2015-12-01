@@ -236,17 +236,24 @@ def export_file(result, header_mapping):
     random_id = normalizer.normalize(time.time())
     file_name = "export_{0}.{1}".format(random_id, 'csv')
     csv_file = StringIO.StringIO()
+    writer = csv.writer(csv_file, delimiter=",", dialect="excel", quotechar='"')
     columns = [d['header'] for d in header_mapping]
-    csv_file.write(','.join(columns) + '\n')
-    import pdb; pdb.set_trace()
+    writer.writerow(columns)
     for row in result:
         items = []
+        if getattr(row, 'getObject'):
+            obj = row.getObject()
+        else:
+            obj = None
         for d in header_mapping:
             #TODO: need to get from the objects themselves in case the data
             # has been transformed
-            items.append(row[d['field']])
+            if obj is None:
+                items.append(row[d['field']])
+            else:
+                items.append(getattr(obj,d['field']))
         log.debug(items)
-        csv_file.write(','.join(items) + '\n')
+        writer.writerow(items)
     csv_attachment = csv_file.getvalue()
     csv_file.close()
     return (file_name, csv_attachment)
@@ -347,7 +354,7 @@ class IImportSchema(form.Schema):
     import_file = NamedFile(
         title=_(
             "import_field_import_file_title",  # nopep8
-            default=u"CSV metadata file"),
+            default=u"CSV metadata to import"),
         description=_(
             "import_field_import_file_description",  # nopep8
             default=u"CSV file containing rows for each content to create or update"),
@@ -388,14 +395,14 @@ class IImportSchema(form.Schema):
         #TODO: should be only locally addable types
         required=True
     )
-    result_as_csv = schema.Bool(
-        title=_(
-            "csv_report",  # nopep8
-            default=u"Report as CSV"),
-        description=_(
-            "csv_report_description",  # nopep8
-            default=u"return a CSV with urls of imported content"),
-    )
+    #result_as_csv = schema.Bool(
+    #    title=_(
+    #        "csv_report",  # nopep8
+    #        default=u"Report as CSV"),
+    #    description=_(
+    #        "csv_report_description",  # nopep8
+    #        default=u"return a CSV with urls of imported content"),
+    #)
 
 
 
@@ -409,7 +416,7 @@ class ImportForm(form.SchemaForm):
 
     # Form label
     label = _("import_form_label",  # nopep8
-              default=u"CSV Import")
+              default=u"CSV Import/Export")
     description = _("import_form_description",  # nopep8
                     default=u"Create or Update content from a CSV")
 
@@ -445,7 +452,7 @@ class ImportForm(form.SchemaForm):
     #    self.request.response.redirect(self.context.absolute_url())
 
     @button.buttonAndHandler(_("import_button_save_import",  # nopep8
-                               default=u"Import CSV"))
+                               default=u"CSV Import"))
     def handleSaveImport(self, action):
         """Create and handle form button "Save and Import"."""
 
@@ -455,10 +462,6 @@ class ImportForm(form.SchemaForm):
             return False
 
         self.save_data(data)
-
-        data, errors = self.extractData()
-        if errors:
-            return False
 
         import_file = data["import_file"]
         if data["object_type"] in ['__ignore__', '__stop__']:
@@ -490,8 +493,10 @@ class ImportForm(form.SchemaForm):
         # fields = get_schema_info(CREATION_TYPE)
         # log.debug(fields)
 
-        if data['header_mapping']:
-            matching_fields = dict([(d['header'],d['field']) for d in data['header_mapping']])
+        # blank header or field means we don't want it
+        header_mapping = [d for d in data['header_mapping'] if d['field'] and d['header']]
+
+        matching_fields = dict([(d['header'],d['field']) for d in header_mapping])
 
         # based from the matching fields, get all the values.
         import_metadata = dexterity_import(
@@ -525,16 +530,53 @@ class ImportForm(form.SchemaForm):
         # import pdb; pdb.set_trace()
         if data['result_as_csv'] and import_metadata["report"]:
             filename, attachment = export_file(import_metadata["report"],
-                                               data['header_mapping'])
+                                               header_mapping)
             log.debug(filename)
             log.debug(attachment)
             self.request.response.setHeader('content-type', 'text/csv')
             self.request.response.setHeader(
                 'Content-Disposition',
                 'attachment; filename="%s"' % filename)
-            self.request.response.setBody(attachment)
+            self.request.response.setBody(attachment, lock=True)
 
         #self.request.response.redirect(self.context.absolute_url())
+
+    @button.buttonAndHandler(_("import___button_import_export",  # nopep8
+                               default=u"Import and Export Changes"))
+    def handleImportExport(self, action):
+        pass
+
+    @button.buttonAndHandler(_("import___button_export",  # nopep8
+                               default=u"CSV Export"))
+    def handleExport(self, action):
+        # Extract form field values and errors from HTTP request
+        data, errors = self.extractData()
+        if errors:
+            return False
+        container = self.context
+        container_path = "/".join(container.getPhysicalPath())
+        #TODO: should we allow more criteria? or at least filter by type?
+        query = dict(path={"query": container_path, "depth": 1},
+#                    portal_type=object_type,
+                     )
+#        query[primary_key]=key_arg[primary_key]
+
+        # blank header or field means we don't want it
+        header_mapping = [d for d in data['header_mapping'] if d['field'] and d['header']]
+
+
+        catalog = api.portal.get_tool("portal_catalog")
+        results = catalog(**query)
+        filename, attachment = export_file(results, header_mapping)
+        #log.debug(filename)
+        #log.debug(attachment)
+        self.request.response.setHeader('content-type', 'text/csv')
+        self.request.response.setHeader(
+            'Content-Disposition',
+            'attachment; filename="%s"' % filename)
+        self.request.response.setBody(attachment, lock=True)
+        return True
+
 
     @button.buttonAndHandler(u"Cancel")
     def handleCancel(self, action):
@@ -544,6 +586,9 @@ class ImportForm(form.SchemaForm):
             request=self.request,
             type="info")
         self.request.response.redirect(self.context.absolute_url())
+
+
+
 
 # IF you want to customize form frame you need to make a custom FormWrapper view around it
 # (default plone.z3cform.layout.FormWrapper is supplied automatically with form.py templates)
