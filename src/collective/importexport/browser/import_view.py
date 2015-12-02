@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from AccessControl.security import checkPermission
 from Products.CMFCore.interfaces import IFolderish
 from Products.CMFPlone.interfaces import ISelectableConstrainTypes, IConstrainTypes
 from plone.dexterity.utils import iterSchemataForType
@@ -192,17 +193,24 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
         else:
             results = []
 
+        #TODO: need to implement stop feature
+
         if len(results) > 1:
             assert "Primary key must be unique"
             continue
         elif len(results) == 1:
             obj = results[0].getObject()
+            if not checkPermission("Modify portal content", obj):
+                #TODO: We should have a different catagory of skipped
+                ignore_count += 1
+                continue
             for key, value in key_arg.items():
                 # does not update metadata
                 if key == 'id' or key == 'path':
                     #TODO: handle renaming later
                     continue
                 #TODO: we should be validating against schemas here
+                #TODO: validate against individual field permissions
                 elif hasattr(obj,key):
                     setattr(obj, key, value)
             # TODO(ivanteoh): any performance risk by calling this?
