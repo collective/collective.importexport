@@ -200,10 +200,11 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
             continue
         elif len(results) == 1:
             obj = results[0].getObject()
-            if not checkPermission("Modify portal content", obj):
-                #TODO: We should have a different catagory of skipped
-                ignore_count += 1
-                continue
+            # TODO: get checkPermission working right
+            #if not checkPermission("Modify portal content", obj):
+            #    #TODO: We should have a different catagory of skipped
+            #    ignore_count += 1
+            #    continue
             for key, value in key_arg.items():
                 # does not update metadata
                 if key == 'id' or key == 'path':
@@ -425,19 +426,11 @@ class IImportSchema(form.Schema):
             default=u"If not found"),
         description=_(
             "import_field_object_type_description",
-            default=u"Action to take if existing content can't be found during import"),
+            default=u"If content can't be found then Create, Skip or Stop at that row. "
+                    u"For rich media such as Videos, upload first."),
         source = if_not_found_list,
         required=True
     )
-    #result_as_csv = schema.Bool(
-    #    title=_(
-    #        "csv_report",  # nopep8
-    #        default=u"Report as CSV"),
-    #    description=_(
-    #        "csv_report_description",  # nopep8
-    #        default=u"return a CSV with urls of imported content"),
-    #)
-
 
 
 class ImportForm(form.SchemaForm):
