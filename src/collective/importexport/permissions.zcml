@@ -7,8 +7,5 @@
     <permission
         id="collective.importexport.import"
         title="collective.importexport: Import" />
-    <permission
-        id="collective.importexport.export"
-        title="collective.importexport: Export" />
   </configure>
 </configure>

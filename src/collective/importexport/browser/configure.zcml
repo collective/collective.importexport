@@ -44,20 +44,4 @@
       layer="..interfaces.ICollectiveImportexportLayer"
       />
 
-  <browser:page
-      for="Products.CMFCore.interfaces.ISiteRoot"
-      name="dexterity_export_view"
-      class=".export_view.ExportView"
-      permission="collective.importexport.export"
-      layer="..interfaces.ICollectiveImportexportLayer"
-      />
-
-  <browser:page
-      for="plone.folder.interfaces.IFolder"
-      name="dexterity_export_view"
-      class=".export_view.ExportView"
-      permission="collective.importexport.export"
-      layer="..interfaces.ICollectiveImportexportLayer"
-      />
-
 </configure>

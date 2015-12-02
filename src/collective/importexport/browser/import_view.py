@@ -214,6 +214,9 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
         elif create_new:
             #TODO: handle creating using passed in path. ie find/create folders
             # Save the objects in this container
+
+            #TODO: currently lets you create files without a require file field
+            #which breaks on view
             obj = api.content.create(
                 type=object_type,
                 container=container,

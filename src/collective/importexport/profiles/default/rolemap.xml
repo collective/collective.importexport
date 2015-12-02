@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<rolemap>
+  <permissions>
+    <permission name="collective.importexport: Import" acquire="True">
+      <role name="Owner"/>
+      <role name="Manager"/>
+      <role name="Contributor"/>
+      <role name="Site Administrator"/>
+    </permission>
+  </permissions>
+</rolemap>

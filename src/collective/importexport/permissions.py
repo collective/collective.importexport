@@ -5,8 +5,5 @@ security = ModuleSecurityInfo('Products.CMFCore.permissions')
 
 security.declarePublic("DexterityImport")
 DexterityImport = "collective.importexport: Import"
-setDefaultRoles(DexterityImport, ("Member", "Manager"))
-
-security.declarePublic("DexterityExport")
-DexterityExport = "collective.importexport: Export"
-setDefaultRoles(DexterityExport, ("Member", "Manager"))
+#TODO: should allow readers to seee this too since they can do an export?
+setDefaultRoles(DexterityImport, ("Owner", "Contributor" "Site Administrator", "Manager"))
