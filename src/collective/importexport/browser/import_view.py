@@ -385,6 +385,8 @@ class IMappingRow(form.Schema):
 class IImportSchema(form.Schema):
     """Define fields used on the form."""
 
+    #TODO: need to get rid of "Keep existing file" etc. It's confusing
+    # suspect this is the wrong field type
     import_file = NamedFile(
         title=_(
             "import_field_import_file_title",  # nopep8
@@ -393,6 +395,7 @@ class IImportSchema(form.Schema):
             "import_field_import_file_description",  # nopep8
             default=u"CSV file containing rows for each content to create or update"),
         required=False
+        #TODO: need to validate we have this file when clicking import action
     )
 #    form.widget('header_mapping', NamedFileFieldWidget)
     header_mapping = schema.List(
@@ -546,6 +549,12 @@ class ImportForm(form.SchemaForm):
         return True
 
 
+
+    #TODO: replace with a report element on import that gives an extra button
+    # to "Download CSV of changes". Requires we have hidden field of all changed
+    # UIDs and then relookup all of those.
+    # Report element can also display list of top 20 creations, top 20 updates etc
+    # replaces info window
     @button.buttonAndHandler(_("import___button_import_export",  # nopep8
                                default=u"Import and Export Changes"))
     def handleImportExport(self, action):
