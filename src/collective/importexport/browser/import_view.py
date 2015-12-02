@@ -4,7 +4,6 @@ from Products.CMFPlone.interfaces import ISelectableConstrainTypes, IConstrainTy
 from plone.dexterity.utils import iterSchemataForType
 from plone.formwidget.namedfile import NamedFileFieldWidget
 from z3c.form.interfaces import NO_VALUE
-from zope.i18nmessageid import Message
 from zope.schema import getFieldsInOrder
 from zope.schema._bootstrapinterfaces import IContextAwareDefaultFactory
 from zope.schema.interfaces import IContextSourceBinder
@@ -29,7 +28,6 @@ from zope.i18n import translate
 from zope.lifecycleevent import ObjectModifiedEvent
 from Products.Five.browser.pagetemplatefile import ViewPageTemplateFile as FiveViewPageTemplateFile
 from collective.z3cform.datagridfield import DataGridFieldFactory, DictRow
-from plone.app.contenttypes import _ as PLONE_MESSAGE_FACTORY
 
 import csv
 import logging
@@ -306,22 +304,23 @@ def fields_list(context):
              SimpleVocabulary.createTerm('path', 'path', 'Path')]
     # path is special and allows us to import to dirs and export resulting path
 
+    portal = api.portal.get()
+    ttool = api.portal.getToolByName(portal, 'translation_service')
+
     for fti in get_allowed_types(context):
         portal_type = fti.getId()
         schemas = iterSchemataForType(portal_type)
-        for schema in schemas:
-            for fieldid, field in getFieldsInOrder(schema):
+        for _schema in schemas:
+            for fieldid, field in getFieldsInOrder(_schema):
                 if fieldid not in found:
                     found[fieldid] = 1
                     #title = "%s (%s)" % (_(field.title), fieldid)
                     #import pdb; pdb.set_trace()
-                    title = PLONE_MESSAGE_FACTORY(field.title)
-                    title = Message(field.title.decode('utf8'), 'plone')
+                    title = ttool.translate(field.title)
                     #from zope.i18n import translate
                     #title = translate(msgid=field.title, domain='plone', target_language='en')
                     terms.append(SimpleVocabulary.createTerm(fieldid, fieldid,
                                                              title))
-
 
     return SimpleVocabulary(terms)
 
