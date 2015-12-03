@@ -4,7 +4,7 @@ from Products.CMFCore.interfaces import IFolderish
 from Products.CMFPlone.interfaces import ISelectableConstrainTypes, IConstrainTypes
 from plone.dexterity.utils import iterSchemataForType
 from plone.formwidget.namedfile import NamedFileFieldWidget
-from z3c.form.interfaces import NO_VALUE
+from z3c.form.interfaces import NO_VALUE, WidgetActionExecutionError
 from zope.schema import getFieldsInOrder
 from zope.schema._bootstrapinterfaces import IContextAwareDefaultFactory
 from zope.schema.interfaces import IContextSourceBinder
@@ -21,7 +21,7 @@ from plone.namedfile.field import NamedFile
 from plone.z3cform.layout import wrap_form
 from Products.CMFPlone.utils import safe_unicode
 from z3c.form import button
-from zope.interface import Interface, directlyProvides, provider
+from zope.interface import Interface, directlyProvides, provider, Invalid
 from zope import schema
 from zope.component import getUtility
 from zope.event import notify
@@ -470,11 +470,36 @@ class ImportForm(form.SchemaForm):
         # Extract form field values and errors from HTTP request
         data, errors = self.extractData()
         if errors:
+            self.status = self.formErrorsMessage
             return False
 
         self.save_data(data)
 
         import_file = data["import_file"]
+
+
+        if not import_file:
+            raise WidgetActionExecutionError('import_file',
+                Invalid(_(u"Please provide a csv file to import")))
+            return
+
+
+        # File upload is not saved in settings
+        file_resource = import_file.data
+        file_name = import_file.filename
+
+        if not (import_file.contentType.startswith("text/") or \
+            import_file.contentType.startswith("application/csv")):
+            raise WidgetActionExecutionError('import_file',
+                Invalid(_(u"Please provide a file of type CSV")))
+            return
+        if import_file.contentType.startswith("application/vnd.ms-excel"):
+            raise WidgetActionExecutionError('import_file',
+                Invalid(_(u"Please convert your Excel file to CSV first")))
+            return
+
+
+
         if data["object_type"] in ['__ignore__', '__stop__']:
             create_new = False
             object_type = None
@@ -482,23 +507,9 @@ class ImportForm(form.SchemaForm):
             create_new = True
             object_type = data["object_type"]
 
-        if not import_file:
-            api.portal.show_message(
-                message=_("import_message_csv_error",  # nopep8
-                    default=u"Please provide a csv file."),
-                request=self.request,
-                type="error")
-            return
-
-        # File upload is not saved in settings
-        file_resource = import_file.data
-        file_name = import_file.filename
-
-        # TODO(ivanteoh): use import_file.contentType to check csv file ext
-
         # list all the dexterity types
-        dx_types = get_portal_types(self.request)
-        log.debug(dx_types)
+        #dx_types = get_portal_types(self.request)
+        #log.debug(dx_types)
 
         # based from the types, display all the fields
         # fields = get_schema_info(CREATION_TYPE)
@@ -507,16 +518,29 @@ class ImportForm(form.SchemaForm):
         # blank header or field means we don't want it
         header_mapping = [d for d in data['header_mapping'] if d['field'] and d['header']]
 
-        matching_fields = dict([(d['header'],d['field']) for d in header_mapping])
+        matching_headers = dict([(d['field'],d['header']) for d in header_mapping])
+
+        if create_new and not(matching_headers.get('id') or matching_headers.get('title')):
+            raise WidgetActionExecutionError('header_mapping',
+                Invalid(_(u"If creating new content you need either 'Short Name"
+                u" or 'Title' in your data.")))
+            return
+        primary_key = data["primary_key"]
+
+        if primary_key and not matching_headers.get(primary_key):
+            raise WidgetActionExecutionError('primary_key',
+                Invalid(_(u"Must be a field selected in Header Mapping")))
+            return
 
         # based from the matching fields, get all the values.
+        matching_fields = dict([(d['header'],d['field']) for d in header_mapping])
         import_metadata = dexterity_import(
             self.context,
             file_resource,
             matching_fields,
             object_type,
             create_new,
-            data["primary_key"]
+            primary_key
         )
 
         existing_count = import_metadata["existing_count"]
