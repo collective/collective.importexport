@@ -5,6 +5,8 @@ from Products.CMFPlone.interfaces import ISelectableConstrainTypes, IConstrainTy
 from plone.dexterity.utils import iterSchemataForType
 from plone.formwidget.namedfile import NamedFileFieldWidget
 from z3c.form.interfaces import NO_VALUE, WidgetActionExecutionError
+from zope.annotation import IAnnotations
+from zope.globalrequest import getRequest
 from zope.schema import getFieldsInOrder
 from zope.schema._bootstrapinterfaces import IContextAwareDefaultFactory
 from zope.schema.interfaces import IContextSourceBinder
@@ -21,7 +23,7 @@ from plone.namedfile.field import NamedFile
 from plone.z3cform.layout import wrap_form
 from Products.CMFPlone.utils import safe_unicode
 from z3c.form import button
-from zope.interface import Interface, directlyProvides, provider, Invalid
+from zope.interface import Interface, directlyProvides, provider, Invalid, implements
 from zope import schema
 from zope.component import getUtility
 from zope.event import notify
@@ -36,30 +38,8 @@ import StringIO
 import time
 
 log = logging.getLogger(__name__)
-KEY_ID = u"_id"
 
-# TODO(ivanteoh): user will pick a PRIMARY_KEY from column name.
-PRIMARY_KEY = "Filename"
-
-# TODO(ivanteoh): convert to import config option (csv_col, obj_field)
-#matching_fields = {
-#    u"Filename": u"filename",
-#    u"Title": u"title",
-#    u"Summary": u"description",
-#    u"IAID": u"iaid",
-#    u"Citable Reference": u"citable_reference",
-#}
-#
-## TODO(ivanteoh): convert to export config option
-#output_orders = [
-#    (u"id", u"ID"),
-#    (u"title", u"Title"),
-#    (u"description", u"Description"),
-#    (u"filename", u"Filename"),
-#    (u"iaid", u"IAID"),
-#    (u"citable_reference", u"Citable Reference"),
-#]
-
+KEY = "collective.importoutput.settings"
 
 def get_portal_types(request, all=True):
     """A list with info on all dexterity content types with existing items.
@@ -285,16 +265,19 @@ def export_file(result, header_mapping, request):
     csv_file.close()
     return (file_name, csv_attachment)
 
-
-def get_allowed_types(context):
-    if context is NO_VALUE or not context or not IFolderish.providedBy(context):
+def getContext(context=None):
+    if context is NO_VALUE or context is None or not IFolderish.providedBy(context):
         #return SimpleVocabulary(terms)
-        from zope.globalrequest import getRequest
         req = getRequest()
         for parent in req.PARENTS:
             if IFolderish.providedBy(parent):
                 context = parent
                 break
+    return context
+
+
+def get_allowed_types(context):
+    context = getContext(context)
 
     if IConstrainTypes.providedBy(context):
         types = IConstrainTypes(context).getImmediatelyAddableTypes()
@@ -302,8 +285,18 @@ def get_allowed_types(context):
         types = context.allowedContentTypes()
     return types
 
+
+FIELD_LIST_CACHE = "collective.importexport.field_list"
 @provider(IContextSourceBinder)
 def fields_list(context):
+    portal = api.portal.get()
+    ttool = api.portal.getToolByName(portal, 'translation_service')
+
+    #annotations = IAnnotations(portal.request)
+    #value = annotations.get(FIELD_LIST_CACHE, None)
+    #if value is not None:
+    #    return value
+
     terms = []
 
     # need to look up all the possible fields we can set on all the content
@@ -313,8 +306,6 @@ def fields_list(context):
              SimpleVocabulary.createTerm('path', 'path', 'Path')]
     # path is special and allows us to import to dirs and export resulting path
 
-    portal = api.portal.get()
-    ttool = api.portal.getToolByName(portal, 'translation_service')
 
     for fti in get_allowed_types(context):
         portal_type = fti.getId()
@@ -331,7 +322,10 @@ def fields_list(context):
                     terms.append(SimpleVocabulary.createTerm(fieldid, fieldid,
                                                              title))
 
-    return SimpleVocabulary(terms)
+    value = SimpleVocabulary(terms)
+    #annotations[FIELD_LIST_CACHE] = value
+    return value
+
 
 @provider(IContextSourceBinder)
 def if_not_found_list(context):
@@ -350,28 +344,42 @@ def if_not_found_list(context):
 
 @provider(IContextAwareDefaultFactory)
 def headersFromRequest(context):
-    from zope.globalrequest import getRequest
-    request = getRequest()
-    fields = fields_list(None)
-    if not request.get('csv_header'):
-        return []
     rows = []
-    reader = csv.DictReader(request.get('csv_header').splitlines(),
-                            delimiter=",",
-                            dialect="excel",
-                            quotechar='"')
+    request = getRequest()
 
-    for col in reader.fieldnames:
+
+    matching_fields = {}
+    # try and load it from settings
+    settings = IAnnotations(getContext(context)).get(KEY)
+    if not settings:
+        #TODO: should look in the parent?
+        return []
+    header_list = settings.get('header_list',[])
+    matching_fields = settings.get('matching_fields',{})
+    if request.get('csv_header'):
+        reader = csv.DictReader(request.get('csv_header').splitlines(),
+                                delimiter=",",
+                                dialect="excel",
+                                quotechar='"')
+        header_list = reader.fieldnames
+
+    fields = fields_list(None)
+    field_names = {}
+    for field in fields:
+        field_names[field.title.lower()] = field.value
+        field_names[field.value.lower()] = field.value
+
+    for col in header_list:
         matched_field = ''
         col = unicode(col.strip())
-        if not col.strip():
+        if not col:
             continue
-        #TODO: try to guess field from header
-        for field in fields:
-            if col.lower() == field.title.lower() or \
-               col.lower() == field.value.lower():
-                matched_field = field.value
-                break
+        if col in matching_fields:
+            matched_field = matching_fields[col]
+        elif col.lower() in field_names:
+            matched_field = field_names[col.lower()]
+        else:
+            matched_field = ""
         rows.append(dict(header=col, field=matched_field))
     return rows
 
@@ -439,7 +447,7 @@ class ImportForm(form.SchemaForm):
     # Which plone.directives.form.Schema subclass is used to define
     # fields for this form
     schema = IImportSchema
-    ignoreContext = True
+    ignoreContext = False
 
     # Form label
     label = _("import_form_label",  # nopep8
@@ -449,10 +457,22 @@ class ImportForm(form.SchemaForm):
     u"For images, files, videos or html documents, use Upload first and use "
     u"CSV import to set the metadata of the uploaded files.")
 
+    def getContent(self):
+        """ """
 
-    def save_data(self, data):
-        # TODO(ivanteoh): save date using Annotation Adapter
-        pass
+        # Create a temporary object holding the settings values out of the patient
+
+        class TemporarySettingsContext(object):
+            implements(IImportSchema)
+
+        obj = TemporarySettingsContext()
+
+        annotations = IAnnotations(self.context)
+        settings = annotations.get(KEY)
+        if settings:
+            obj.primary_key = settings['primary_key']
+            obj.object_type = settings['object_type']
+        return obj
 
     def updateWidgets(self):
         self.fields['header_mapping'].widgetFactory = DataGridFieldFactory
@@ -472,8 +492,6 @@ class ImportForm(form.SchemaForm):
         if errors:
             self.status = self.formErrorsMessage
             return False
-
-        self.save_data(data)
 
         import_file = data["import_file"]
 
@@ -566,8 +584,17 @@ class ImportForm(form.SchemaForm):
             request=self.request,
             type="info")
 
-
         self.import_metadata = import_metadata
+
+        # Save our sucessful settings to save time next import
+        annotations = IAnnotations(self.context)
+        settings = annotations.setdefault(KEY, {})
+        settings['header_list'] = [d['header'] for d in header_mapping]
+        # we will keep making this bigger in case they switch between several CSVs
+        settings.setdefault("matching_fields",{}).update(matching_fields)
+        settings['primary_key'] = primary_key
+        settings['object_type'] = object_type
+
         return True
 
 
