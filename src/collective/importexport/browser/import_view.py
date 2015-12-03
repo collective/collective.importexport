@@ -8,7 +8,7 @@ from z3c.form.interfaces import NO_VALUE, WidgetActionExecutionError
 from zope.annotation import IAnnotations
 from zope.globalrequest import getRequest
 from zope.schema import getFieldsInOrder
-from zope.schema.interfaces import IContextSourceBinder
+from zope.schema.interfaces import IContextSourceBinder, IText, IBytes, IInt, IFloat, IDecimal, IChoice
 from zope.schema.vocabulary import SimpleVocabulary
 from collective.importexport import _
 from operator import itemgetter
@@ -263,19 +263,22 @@ def fields_list(context):
              SimpleVocabulary.createTerm('path', 'path', 'Path')]
     # path is special and allows us to import to dirs and export resulting path
 
+    allowed_types = [IText, IBytes, IInt, IFloat, IDecimal, IChoice]
 
     for fti in get_allowed_types(context):
         portal_type = fti.getId()
         schemas = iterSchemataForType(portal_type)
         for _schema in schemas:
             for fieldid, field in getFieldsInOrder(_schema):
+
+                if not any([ftype.providedBy(field) for ftype in allowed_types]):
+                    continue
+
                 if fieldid not in found:
                     found[fieldid] = 1
-                    #title = "%s (%s)" % (_(field.title), fieldid)
-                    #import pdb; pdb.set_trace()
                     title = ttool.translate(field.title)
-                    #from zope.i18n import translate
-                    #title = translate(msgid=field.title, domain='plone', target_language='en')
+                    if not title:
+                        continue
                     terms.append(SimpleVocabulary.createTerm(fieldid, fieldid,
                                                              title))
 
