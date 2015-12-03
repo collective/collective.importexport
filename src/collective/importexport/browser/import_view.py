@@ -520,13 +520,19 @@ class ImportForm(form.SchemaForm):
 
         matching_headers = dict([(d['field'],d['header']) for d in header_mapping])
 
+
         if create_new and not(matching_headers.get('id') or matching_headers.get('title')):
             raise WidgetActionExecutionError('header_mapping',
                 Invalid(_(u"If creating new content you need either 'Short Name"
                 u" or 'Title' in your data.")))
             return
-        primary_key = data["primary_key"]
 
+        if not matching_headers:
+            raise WidgetActionExecutionError('header_mapping',
+                Invalid(_(u"You must pick which fields should contain your data")))
+            return
+
+        primary_key = data["primary_key"]
         if primary_key and not matching_headers.get(primary_key):
             raise WidgetActionExecutionError('primary_key',
                 Invalid(_(u"Must be a field selected in Header Mapping")))
