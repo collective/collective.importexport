@@ -113,7 +113,6 @@ def _get_prop(prop, item, default=None):
     return ret
 
 
-
 def dexterity_import(container, data, mappings, object_type, create_new=False,
                      primary_key='id'):
     """Import to dexterity-types from file to container."""
@@ -131,7 +130,6 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
     container_path = "/".join(container.getPhysicalPath())
 
     # TODO(ivanteoh): Make sure container is either folder or SiteRoot
-    # import pdb; pdb.set_trace()
 
     reader = csv.DictReader(data.splitlines(),
                             delimiter=",",
@@ -221,6 +219,8 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
         elif create_new:
             #TODO: handle creating using passed in path. ie find/create folders
             # Save the objects in this container
+
+            #TODO: validate we either have a id or title (or make random ids)
 
             #TODO: currently lets you create files without a require file field
             #which breaks on view
