@@ -8,7 +8,6 @@ from z3c.form.interfaces import NO_VALUE, WidgetActionExecutionError
 from zope.annotation import IAnnotations
 from zope.globalrequest import getRequest
 from zope.schema import getFieldsInOrder
-from zope.schema._bootstrapinterfaces import IContextAwareDefaultFactory
 from zope.schema.interfaces import IContextSourceBinder
 from zope.schema.vocabulary import SimpleVocabulary
 from collective.importexport import _
@@ -40,48 +39,6 @@ import time
 log = logging.getLogger(__name__)
 
 KEY = "collective.importoutput.settings"
-
-def get_portal_types(request, all=True):
-    """A list with info on all dexterity content types with existing items.
-
-    :param request: Request for translation
-    :type obj: Request object
-    :param all: True for including all Dexterity content types
-    :type obj: Boolean
-    :returns: Dexterity content types
-    :rtype: List
-    """
-    catalog = api.portal.get_tool("portal_catalog")
-    portal_types = api.portal.get_tool("portal_types")
-    results = []
-    for fti in portal_types.listTypeInfo():
-        if not IDexterityFTI.providedBy(fti):
-            continue
-        number = len(catalog(portal_type=fti.id))
-        if number >= 1 or all:
-            results.append({
-                "number": number,
-                "type": fti.id,
-                "title": translate(
-                    fti.title, domain="plone", context=request)
-            })
-    return sorted(results, key=itemgetter("title"))
-
-
-# TODO(ivanteoh): Not used, remove later
-def get_schema_info(portal_type):
-    """Get a flat list of all fields in all schemas for a content-type.
-
-    :param data: Dexterity content type
-    :type obj: String
-    :returns: All fields on this object
-    :rtype: List
-    """
-    fields = []
-    for schema_items in iterSchemataForType(portal_type):
-        for fieldname in schema_items:
-            fields.append((fieldname, schema_items.get(fieldname)))
-    return fields
 
 
 # TODO(ivanteoh): Not used, remove later
@@ -341,48 +298,6 @@ def if_not_found_list(context):
 
 
 
-
-@provider(IContextAwareDefaultFactory)
-def headersFromRequest(context):
-    rows = []
-    request = getRequest()
-
-
-    matching_fields = {}
-    # try and load it from settings
-    settings = IAnnotations(getContext(context)).get(KEY)
-    if not settings:
-        #TODO: should look in the parent?
-        return []
-    header_list = settings.get('header_list',[])
-    matching_fields = settings.get('matching_fields',{})
-    if request.get('csv_header'):
-        reader = csv.DictReader(request.get('csv_header').splitlines(),
-                                delimiter=",",
-                                dialect="excel",
-                                quotechar='"')
-        header_list = reader.fieldnames
-
-    fields = fields_list(None)
-    field_names = {}
-    for field in fields:
-        field_names[field.title.lower()] = field.value
-        field_names[field.value.lower()] = field.value
-
-    for col in header_list:
-        matched_field = ''
-        col = unicode(col.strip())
-        if not col:
-            continue
-        if col in matching_fields:
-            matched_field = matching_fields[col]
-        elif col.lower() in field_names:
-            matched_field = field_names[col.lower()]
-        else:
-            matched_field = ""
-        rows.append(dict(header=col, field=matched_field))
-    return rows
-
 class IMappingRow(form.Schema):
     header = schema.TextLine(title=u"CSV Header", required=False)
     field = schema.Choice(source=fields_list,
@@ -403,7 +318,6 @@ class IImportSchema(form.Schema):
             "import_field_import_file_description",  # nopep8
             default=u"CSV file containing rows for each content to create or update"),
         required=False
-        #TODO: need to validate we have this file when clicking import action
     )
 #    form.widget('header_mapping', NamedFileFieldWidget)
     header_mapping = schema.List(
@@ -411,7 +325,6 @@ class IImportSchema(form.Schema):
         description=_(u"Any matching headers in your CSV will be mapped to "
                       u"these fields"),
         value_type=DictRow(title=u"tablerow", schema=IMappingRow),
-        defaultFactory=headersFromRequest,
         missing_value={},
         required=False)
 
@@ -472,7 +385,49 @@ class ImportForm(form.SchemaForm):
         if settings:
             obj.primary_key = settings['primary_key']
             obj.object_type = settings['object_type']
+
+        obj.header_mapping = self.headersFromRequest()
         return obj
+
+
+    def headersFromRequest(self):
+        rows = []
+        request = self.request
+        context = self.context
+
+        # try and load it from settings
+        settings = IAnnotations(getContext(context)).get(KEY, {})
+        if not settings:
+            #TODO: should look in the parent?
+            pass
+        header_list = settings.get('header_list',[])
+        matching_fields = settings.get('matching_fields',{})
+        if request.get('csv_header'):
+            reader = csv.DictReader(request.get('csv_header').splitlines(),
+                                    delimiter=",",
+                                    dialect="excel",
+                                    quotechar='"')
+            header_list = reader.fieldnames
+
+        fields = fields_list(None)
+        field_names = {}
+        for field in fields:
+            field_names[field.title.lower()] = field.value
+            field_names[field.value.lower()] = field.value
+
+        for col in header_list:
+            col = unicode(col.strip())
+            if not col:
+                continue
+            if col in matching_fields:
+                matched_field = matching_fields[col]
+            elif col.lower() in field_names:
+                matched_field = field_names[col.lower()]
+            else:
+                matched_field = ""
+            rows.append(dict(header=col, field=matched_field))
+        return rows
+
 
     def updateWidgets(self):
         self.fields['header_mapping'].widgetFactory = DataGridFieldFactory
