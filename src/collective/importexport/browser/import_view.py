@@ -4,6 +4,7 @@ from Products.CMFCore.interfaces import IFolderish
 from Products.CMFPlone.interfaces import ISelectableConstrainTypes, IConstrainTypes
 from plone.dexterity.utils import iterSchemataForType
 from plone.formwidget.namedfile import NamedFileFieldWidget
+from transmogrify.dexterity.schemaupdater import DexterityUpdateSection
 from z3c.form.interfaces import NO_VALUE, WidgetActionExecutionError
 from zope.annotation import IAnnotations
 from zope.globalrequest import getRequest
@@ -53,6 +54,24 @@ def _get_prop(prop, item, default=None):
 def dexterity_import(container, data, mappings, object_type, create_new=False,
                      primary_key='id'):
     """Import to dexterity-types from file to container."""
+
+    results = {}
+    reader = read_and_create(container, data, mappings, object_type, create_new,
+                     primary_key)
+
+    options = {'path-key':'__path__'}
+    class Dummy(object):
+        pass
+    transmogrifier = Dummy()
+    transmogrifier.context = container
+    transmogrifier.configuration_id = "dummy"
+    updater = DexterityUpdateSection(transmogrifier, "Updater", options, reader)
+    for res in updater:
+        pass
+    return results
+
+def read_and_create(container, data, mappings, object_type, create_new=False,
+                     primary_key='id', counts = {}):
     new_count = 0
     existing_count = 0
     ignore_count = 0
@@ -74,10 +93,11 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
                             quotechar='"')
     rows = []
     if not reader:
-        return {"existing_count": existing_count,
+        counts.update({"existing_count": existing_count,
                 "new_count": new_count,
                 "ignore_count": ignore_count,
-                "report": report}
+                "report": report})
+
 
     # use IURLNormalizer instead of IIDNormalizer for url id
     normalizer = getUtility(IURLNormalizer)
@@ -103,57 +123,57 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
                     value.decode("utf-8")
 
 
-        obj = None
-
-        # should not have u"id" in the dictionary
-        #assert u"id" not in resource
-        assert u"type" not in key_arg
-        assert u"container" not in key_arg
-        assert u"safe_id" not in key_arg
-
-
         # find existing obj
-        # TODO: this is wrong since indexs aren't always the same as fields
-        if primary_key in key_arg:
+        obj = None
+        if primary_key and primary_key not in key_arg:
+            obj = None
+            # in this case we shouldn't create or update it
+            ignore_count += 1
+            continue
+        if primary_key in ['__path__','id','__url__']:
+            if primary_key == '__url__':
+                path = '/'.join(getRequest().physicalPathFromURL(key_arg[primary_key]))
+                if not path.startswith(container_path):
+                    ignore_count += 1
+                    continue
+                path = path[len(container_path):].lstrip('/')
+            else:
+                path = key_arg[primary_key].encode().lstrip('/')
+            obj = container.restrictedTraverse(path, None)
+            if obj is None:
+                # special case because id gets normalised.
+                # try and guess the normalised id
+                if primary_key == 'id':
+                    # just in case id has '/' in
+                    path = normalizer.normalize(key_arg[primary_key].encode())
+                else:
+                    path = path.rsplit('/',1)
+                    path[-1] = normalizer.normalize(path[-1])
+                    path = '/'.join(path)
+                obj = container.restrictedTraverse(path, None)
+            if 'id' not in key_arg:
+                # ensure we don't use title
+                key_arg['id'] = path.split('/')[-1]
+            if obj is not None:
+                existing_count += 1
+
+        elif primary_key and primary_key in key_arg:
+            # TODO: this is wrong since indexs aren't always the same as fields
+            # Should check if there is an index, else back down to find util
             query = dict(path={"query": container_path, "depth": 1},
     #                    portal_type=object_type,
                          )
             query[primary_key]=key_arg[primary_key]
             results = catalog(**query)
-            # special case because id gets normalised.
-            # try and guess the normalised id
-            if len(results) == 0 and primary_key == 'id':
-                query[primary_key] = normalizer.normalize(key_arg[primary_key])
-                results = catalog(**query)
-        else:
-            results = []
+            if len(results) > 1:
+                assert "Primary key must be unique"
+                ignore_count += 1
+                continue
+            elif len(results) == 1:
+                obj = results[0].getObject()
+                existing_count += 1
 
-        #TODO: need to implement stop feature
-
-        if len(results) > 1:
-            assert "Primary key must be unique"
-            continue
-        elif len(results) == 1:
-            obj = results[0].getObject()
-            # TODO: get checkPermission working right
-            #if not checkPermission("Modify portal content", obj):
-            #    #TODO: We should have a different catagory of skipped
-            #    ignore_count += 1
-            #    continue
-            for key, value in key_arg.items():
-                # does not update metadata
-                if key == 'id' or key == 'path':
-                    #TODO: handle renaming later
-                    continue
-                #TODO: we should be validating against schemas here
-                #TODO: validate against individual field permissions
-                elif hasattr(obj,key):
-                    setattr(obj, key, value)
-            # TODO(ivanteoh): any performance risk by calling this?
-            #TODO: only do this is we changed somthing
-            notify(ObjectModifiedEvent(obj))
-            existing_count += 1
-        elif create_new:
+        if obj is None and create_new:
             #TODO: handle creating using passed in path. ie find/create folders
             # Save the objects in this container
 
@@ -161,30 +181,48 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
 
             #TODO: currently lets you create files without a require file field
             #which breaks on view
+
             obj = api.content.create(
                 type=object_type,
                 container=container,
                 safe_id=True,
-                **key_arg
+               **{key: key_arg[key] for key in ['id','title'] if key in key_arg}
             )
             new_count += 1
-        else:
+        elif obj is None:
             ignore_count += 1
             continue
 
+        #if not checkPermission("zope.Modify", obj):
+        #    ignore_count += 1
+        #    continue
+
+
+        key_arg['__path__'] = '/'.join(obj.getPhysicalPath())[len(container_path)+1:]
+
+        if 'id' in key_arg:
+            del key_arg['id'] # otherwise transmogrifier renames it
+        yield key_arg
+        # TODO(ivanteoh): any performance risk by calling this?
+        #TODO: only do this is we changed somthing
+        notify(ObjectModifiedEvent(obj))
+
+        #TODO: need to implement stop feature
+
         assert obj.id
 
+
         # generate report for csv export
-        key_arg[u"id"] = obj.id
-        key_arg[u'path'] = obj.absolute_url()
-        report.append(obj)
+#        key_arg[u"id"] = obj.id
+#        key_arg[u'path'] = obj.absolute_url()
+#        report.append(obj)
 
     # Later if want to rename
     # api.content.rename(obj=portal["blog"], new_id="old-blog")
-    return {"existing_count": existing_count,
+    counts.update( {"existing_count": existing_count,
             "new_count": new_count,
             "ignore_count": ignore_count,
-            "report": report}
+            "report": report} )
 
 
 def export_file(result, header_mapping, request):
