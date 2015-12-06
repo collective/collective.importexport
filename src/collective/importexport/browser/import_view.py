@@ -127,7 +127,7 @@ def read_and_create(container, data, mappings, object_type, create_new=False,
             # in this case we shouldn't create or update it
             ignore_count += 1
             continue
-        if primary_key in ['_path','id','__url']:
+        if primary_key in ['_path','id','_url']:
             if primary_key == '_url':
                 path = '/'.join(getRequest().physicalPathFromURL(key_arg[primary_key]))
                 if not path.startswith(container_path):

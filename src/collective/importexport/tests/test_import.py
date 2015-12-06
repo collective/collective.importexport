@@ -118,13 +118,26 @@ test1/mp4,1,new summary
 
     def test_url(self):
         dexterity_import(self.target,
-                         """url,date\nhttp://localhost/plone/target/test1,10/10/2015""",
-                         dict(url='__url__', date="title"),
+                         """url,date\n"http://localhost/plone/target/test1",10/10/2015""",
+                         dict(url='_url', date="title"),
                          object_type="Document",
                          create_new=True,
-                         primary_key='__url__')
+                         primary_key='_url')
         self.assertIn('test1', self.target.objectIds())
         self.assertEqual(getattr(self.target['test1'],'blah',None), None)
+
+    def test_keywords(self):
+        dexterity_import(self.target,
+                         """filename,keywords\ntest1,"blah1 blah2" """,
+                         dict(filename='id', keywords="subjects"),
+                         object_type="Document",
+                         create_new=True,
+                         primary_key='id')
+        self.assertIn('test1', self.target.objectIds())
+        print dir(self.target['test1'])
+        self.assertEqual(self.target['test1'].subjects, ['blah1','blah2'])
+
+
 
     def test_import_view(self):
 #        view = getMultiAdapter((self.target, self.portal.REQUEST), name='dexterity_import_view')
