@@ -3,19 +3,17 @@ from AccessControl.security import checkPermission
 from Products.CMFCore.interfaces import IFolderish
 from Products.CMFPlone.interfaces import ISelectableConstrainTypes, IConstrainTypes
 from plone.dexterity.utils import iterSchemataForType
-from plone.formwidget.namedfile import NamedFileFieldWidget
+from transmogrify.dexterity.interfaces import ISerializer
 from transmogrify.dexterity.schemaupdater import DexterityUpdateSection
 from z3c.form.interfaces import NO_VALUE, WidgetActionExecutionError
 from zope.annotation import IAnnotations
 from zope.globalrequest import getRequest
 from zope.schema import getFieldsInOrder
-from zope.schema.interfaces import IContextSourceBinder, IText, IBytes, IInt, IFloat, IDecimal, IChoice
+from zope.schema.interfaces import IContextSourceBinder, IBool, IText, IBytes, IInt, IFloat, IDecimal, IChoice, IDate, IDatetime, ITime
 from zope.schema.vocabulary import SimpleVocabulary
 from collective.importexport import _
-from operator import itemgetter
 from plone import api
-from plone.dexterity.interfaces import IDexterityFTI
-from plone.dexterity.utils import iterSchemataForType
+from plone.dexterity.utils import iterSchemataForType, iterSchemata
 from plone.directives import form
 from plone.i18n.normalizer.interfaces import IIDNormalizer
 from plone.i18n.normalizer.interfaces import IURLNormalizer
@@ -27,7 +25,6 @@ from zope.interface import Interface, directlyProvides, provider, Invalid, imple
 from zope import schema
 from zope.component import getUtility
 from zope.event import notify
-from zope.i18n import translate
 from zope.lifecycleevent import ObjectModifiedEvent
 from Products.Five.browser.pagetemplatefile import ViewPageTemplateFile as FiveViewPageTemplateFile
 from collective.z3cform.datagridfield import DataGridFieldFactory, DictRow
@@ -59,7 +56,7 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
     reader = read_and_create(container, data, mappings, object_type, create_new,
                      primary_key)
 
-    options = {'path-key':'__path__'}
+    options = {'path-key':'_path'}
     class Dummy(object):
         pass
     transmogrifier = Dummy()
@@ -130,8 +127,8 @@ def read_and_create(container, data, mappings, object_type, create_new=False,
             # in this case we shouldn't create or update it
             ignore_count += 1
             continue
-        if primary_key in ['__path__','id','__url__']:
-            if primary_key == '__url__':
+        if primary_key in ['_path','id','__url']:
+            if primary_key == '_url':
                 path = '/'.join(getRequest().physicalPathFromURL(key_arg[primary_key]))
                 if not path.startswith(container_path):
                     ignore_count += 1
@@ -198,7 +195,7 @@ def read_and_create(container, data, mappings, object_type, create_new=False,
         #    continue
 
 
-        key_arg['__path__'] = '/'.join(obj.getPhysicalPath())[len(container_path)+1:]
+        key_arg['_path'] = '/'.join(obj.getPhysicalPath())[len(container_path)+1:]
 
         if 'id' in key_arg:
             del key_arg['id'] # otherwise transmogrifier renames it
@@ -225,13 +222,13 @@ def read_and_create(container, data, mappings, object_type, create_new=False,
             "report": report} )
 
 
-def export_file(result, header_mapping, request):
+def export_file(result, header_mapping, request=None):
     if not result:
         return None,None
 
-    normalizer = getUtility(IIDNormalizer)
-    random_id = normalizer.normalize(time.time())
-    file_name = "export_{0}.{1}".format(random_id, 'csv')
+    if request is None:
+        request = getRequest()
+
     csv_file = StringIO.StringIO()
     writer = csv.writer(csv_file, delimiter=",", dialect="excel", quotechar='"')
     columns = [d['header'] for d in header_mapping]
@@ -245,20 +242,40 @@ def export_file(result, header_mapping, request):
         for d in header_mapping:
             #TODO: need to get from the objects themselves in case the data
             # has been transformed
+            fieldid = d['field']
             if obj is None:
-                items.append(row[d['field']])
-            else:
-                if d['field'] == 'path':
-                    path = obj.getPhysicalPath()
-                    virtual_path = request.physicalPathToVirtualPath(path)
-                    items.append('/'.join(virtual_path))
-                else:
-                    items.append(getattr(obj,d['field']))
+                items.append(row(fieldid))
+                continue
+            if fieldid == '_path':
+                path = obj.getPhysicalPath()
+                virtual_path = request.physicalPathToVirtualPath(path)
+                items.append('/'.join(virtual_path))
+                continue
+            elif fieldid == '_url':
+                items.append(obj.absolute_url())
+                continue
+
+
+            for schemata in iterSchemata(obj):
+                if fieldid not in schemata:
+                    continue
+                field = schemata[fieldid]
+
+                try:
+                    value = field.get(schemata(obj))
+                except AttributeError:
+                    continue
+                if value is field.missing_value:
+                    continue
+                serializer = ISerializer(field)
+                items.append(serializer(value, {}))
+
+
         log.debug(items)
         writer.writerow(items)
     csv_attachment = csv_file.getvalue()
     csv_file.close()
-    return (file_name, csv_attachment)
+    return csv_attachment
 
 def getContext(context=None):
     if context is NO_VALUE or context is None or not IFolderish.providedBy(context):
@@ -298,10 +315,12 @@ def fields_list(context):
     # types we might update in the given folder
     found = {}
     terms = [SimpleVocabulary.createTerm('', '', ''),
-             SimpleVocabulary.createTerm('path', 'path', 'Path')]
+             SimpleVocabulary.createTerm('_path', '_path', 'Path'),
+             SimpleVocabulary.createTerm('_url', '_url', 'URL of Item')]
     # path is special and allows us to import to dirs and export resulting path
 
-    allowed_types = [IText, IBytes, IInt, IFloat, IDecimal, IChoice]
+    allowed_types = [IText, IBytes, IInt, IFloat, IDecimal, IChoice, IDatetime,
+                     ITime, IDate]
 
     for fti in get_allowed_types(context):
         portal_type = fti.getId()
@@ -650,7 +669,11 @@ class ImportForm(form.SchemaForm):
 
         catalog = api.portal.get_tool("portal_catalog")
         results = catalog(**query)
-        filename, attachment = export_file(results, header_mapping, self.request)
+
+        normalizer = getUtility(IIDNormalizer)
+        random_id = normalizer.normalize(time.time())
+        filename = "export_{0}.{1}".format(random_id, 'csv')
+        attachment = export_file(results, header_mapping, self.request)
         #log.debug(filename)
         #log.debug(attachment)
         self.request.response.setHeader('content-type', 'text/csv')

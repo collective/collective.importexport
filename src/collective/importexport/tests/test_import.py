@@ -1,8 +1,9 @@
 import unittest
 from DateTime.DateTime import DateTime
+from plone import api
 from zope.interface import implements
 from zope.component import getUtility, getMultiAdapter
-from collective.importexport.browser.import_view import dexterity_import
+from collective.importexport.browser.import_view import dexterity_import, export_file
 from collective.importexport.testing import COLLECTIVE_IMPORTEXPORT_INTEGRATION_TESTING
 
 from plone.app.testing import TEST_USER_ID
@@ -131,3 +132,57 @@ test1/mp4,1,new summary
         pass
 
         #self.assertTrue(False)
+
+
+
+class TestExport(unittest.TestCase):
+    layer = COLLECTIVE_IMPORTEXPORT_INTEGRATION_TESTING
+
+    def setUp(self):
+        """Custom shared utility setup for tests."""
+        self.portal = self.layer['portal']
+        self.portal.invokeFactory('Folder', 'target')
+        self.target = self.portal.target
+        dexterity_import(self.target,
+                         TEST1,
+                         dict(Filename='id', Description="description"),
+                         object_type="Document",
+                         create_new=True,
+                         primary_key='id')
+
+    def all(self):
+        container_path = "/".join(self.target.getPhysicalPath())
+        query = dict(path={"query": container_path, "depth": 1})
+        catalog = api.portal.get_tool("portal_catalog")
+        return catalog(**query)
+
+
+    def test_export(self):
+
+        res =  export_file(self.all(),
+                            [dict(header='Filename', field='id'),
+                             dict(header='Description',field="description")],
+                            None)
+        self.assertIn("test1.mp4,summary1 blah", res)
+        self.assertIn('test2.mp4,"summary2, blah"', res)
+
+    def test_date(self):
+        dexterity_import(self.target,
+                         """filename,date\ntest1,10/10/2015""",
+                         dict(filename='id', date="effective"),
+                         object_type="Document",
+                         create_new=True,
+                         primary_key='id')
+
+        res =  export_file(self.all(),
+                            [dict(header='Filename', field='id'),
+                             dict(header='date',field="effective")],
+                            None)
+        self.assertIn("test1,2015-10-10 00:00:00", res)
+
+    def test_url(self):
+        res =  export_file(self.all(),
+                            [dict(header='Filename', field='id'),
+                             dict(header='URL',field="_url")],
+                            None)
+        self.assertIn("test1.mp4,http://nohost/plone/target/test1.mp4", res)
