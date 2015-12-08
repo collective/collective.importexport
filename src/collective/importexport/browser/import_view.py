@@ -217,7 +217,7 @@ def read_and_create(container, data, mappings, object_type, create_new=False,
 
 def export_file(result, header_mapping, request=None):
     if not result:
-        return None,None
+        return None
 
     if request is None:
         request = getRequest()
@@ -233,8 +233,6 @@ def export_file(result, header_mapping, request=None):
         else:
             obj = row
         for d in header_mapping:
-            #TODO: need to get from the objects themselves in case the data
-            # has been transformed
             fieldid = d['field']
             if obj is None:
                 items.append(row(fieldid))
@@ -248,7 +246,7 @@ def export_file(result, header_mapping, request=None):
                 items.append(obj.absolute_url())
                 continue
 
-
+            value = ""
             for schemata in iterSchemata(obj):
                 if fieldid not in schemata:
                     continue
@@ -261,10 +259,11 @@ def export_file(result, header_mapping, request=None):
                 if value is field.missing_value:
                     continue
                 serializer = ISerializer(field)
-                items.append(serializer(value, {}))
+                value = serializer(value, {})
+                break
+            items.append(value)
 
-
-        log.debug(items)
+#        log.debug(items)
         writer.writerow(items)
     csv_attachment = csv_file.getvalue()
     csv_file.close()
@@ -634,7 +633,10 @@ class ImportForm(form.SchemaForm):
         # export to csv file
         # import pdb; pdb.set_trace()
         if self.import_metadata["report"]:
-            filename, attachment = export_file(self.import_metadata["report"],
+            normalizer = getUtility(IIDNormalizer)
+            random_id = normalizer.normalize(time.time())
+            filename = "export_{0}.{1}".format(random_id, 'csv')
+            attachment = export_file(self.import_metadata["report"],
                                                header_mapping,
                                                self.request)
             self.request.response.setHeader('content-type', 'text/csv')
