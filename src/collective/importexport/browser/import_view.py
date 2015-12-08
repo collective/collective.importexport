@@ -375,8 +375,10 @@ class IImportSchema(form.Schema):
 #    form.widget('header_mapping', NamedFileFieldWidget)
     header_mapping = schema.List(
         title=_(u'Header Mapping'),
-        description=_(u"Any matching headers in your CSV will be mapped to "
-                      u"these fields"),
+        description=_(u"For Import any matching headers in your CSV will be mapped to "
+                      u"these fields. If Header is not found then the data will be ignored."
+                      u" For export, the internal fields will be exported to the "
+                      u" header names listed."),
         value_type=DictRow(title=u"tablerow", schema=IMappingRow),
         missing_value={},
         required=False)
@@ -387,7 +389,8 @@ class IImportSchema(form.Schema):
             default=u"Test if content exists using"),
         description=_(
             "import_field_primary_key_description",
-            default=u"Field with unique id to use to check if content already exists. "
+            default=u"Field with unique id to use to check if content already exists.  "
+                    u"Ignored for export."
             "Normally 'Short Name' or 'Path'."
             ),
         source=fields_list, #TODO: should be index not fieldname
@@ -401,7 +404,8 @@ class IImportSchema(form.Schema):
         description=_(
             "import_field_object_type_description",
             default=u"If content can't be found then Create, Skip or Stop at that row. "
-                    u"For rich media such as Videos, upload first."),
+                    u"For rich media such as Videos, upload first. Ignored for "
+                    u"export."),
         source = if_not_found_list,
         required=True
     )
