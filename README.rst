@@ -7,7 +7,9 @@ Collective Import & Export
 ==============================================================================
 
 Provides a user action to do bulk metadata import and export on Plone content via
-CSV files.
+CSV files. It doesn't support all field types (such as files) so its not suitable
+for import and export of complete content trees, but rather bulk metadata updates
+and reporting.
 
 Features
 --------
@@ -23,6 +25,7 @@ Comparison to Other Plugins
 ---------------------------
 
 - https://github.com/collective/collective.excelimportexport
+
   - con: requires columns to match internal fields
   - con: requires both path and portal_type in the data
   - con: excel only
@@ -35,6 +38,7 @@ Comparison to Other Plugins
   - con: XML only format export and import
 
 - https://github.com/collective/collective.contentexport
+
   - con: DX only
   - con: export only
   - pro: Can select types to export
@@ -43,20 +47,24 @@ Comparison to Other Plugins
   - pro: export files
 
 - https://plone.org/products/csvreplicata
+
   - pro: plone 3 only
   - pro: handles referencefields
 
 - https://plone.org/products/smart-csv-exporter
+
   - con: doesn't support plone 5
   - con: export only
   - pro: works with collections so you can select content to export
 
 - https://plone.org/products/archecsv
+
   - con: plone 2.5 only. AT only
   - pro: lets the user select fields
   - pro: can paste and edit csv file
 
 - https://pypi.python.org/pypi/transmogrify.dexterity
+
   - con: No UI. Have to configure via files and run on commandline
 
 Usage
@@ -80,19 +88,6 @@ Export
 1. Select the headers and internal fields to export (will remember from an import)
 2. Export
 
-Documentation
--------------
-
-Full documentation for end users can be found in the "docs" folder, and is also available online at http://docs.plone.org/foo/bar
-
-
-Translations
-------------
-
-This product has been translated into
-
-- Klingon (thanks, K'Plai)
-
 
 Installation
 ------------
@@ -115,14 +110,6 @@ Contribute
 
 - Issue Tracker: https://github.com/collective/collective.importexport/issues
 - Source Code: https://github.com/collective/collective.importexport
-- Documentation: https://docs.plone.org/foo/bar
-
-
-Support
--------
-
-If you are having issues, please let us know.
-We have a mailing list located at: project@example.com
 
 
 License
