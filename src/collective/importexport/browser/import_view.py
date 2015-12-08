@@ -52,9 +52,9 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
                      primary_key='id'):
     """Import to dexterity-types from file to container."""
 
-    results = {}
+    counts = {}
     reader = read_and_create(container, data, mappings, object_type, create_new,
-                     primary_key)
+                     primary_key, counts=counts)
 
     options = {'path-key':'_path'}
     class Dummy(object):
@@ -63,9 +63,9 @@ def dexterity_import(container, data, mappings, object_type, create_new=False,
     transmogrifier.context = container
     transmogrifier.configuration_id = "dummy"
     updater = DexterityUpdateSection(transmogrifier, "Updater", options, reader)
-    for res in updater:
+    for _ in updater:
         pass
-    return results
+    return counts
 
 def read_and_create(container, data, mappings, object_type, create_new=False,
                      primary_key='id', counts = {}):
@@ -88,13 +88,6 @@ def read_and_create(container, data, mappings, object_type, create_new=False,
                             delimiter=",",
                             dialect="excel",
                             quotechar='"')
-    rows = []
-    if not reader:
-        counts.update({"existing_count": existing_count,
-                "new_count": new_count,
-                "ignore_count": ignore_count,
-                "report": report})
-
 
     # use IURLNormalizer instead of IIDNormalizer for url id
     normalizer = getUtility(IURLNormalizer)

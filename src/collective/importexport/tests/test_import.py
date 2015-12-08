@@ -126,16 +126,48 @@ test1/mp4,1,new summary
         self.assertIn('test1', self.target.objectIds())
         self.assertEqual(getattr(self.target['test1'],'blah',None), None)
 
-    def test_keywords(self):
+    #def test_boolean(self):
+    #    dexterity_import(self.target,
+    #                     """filename,value\ntest1,True """,
+    #                     dict(filename='id', value="allow_discussion"),
+    #                     object_type="Document",
+    #                     create_new=True,
+    #                     primary_key='id')
+    #    self.assertIn('test1', self.target.objectIds())
+    #    #print dir(self.target['test1'])
+    #    self.assertEquals(self.target['test1'].allow_discussion, True)
+
+
+    def test_list_keywords(self):
         dexterity_import(self.target,
-                         """filename,keywords\ntest1,"blah1 blah2" """,
+                         """filename,keywords\ntest1,"blah1;blah2" """,
                          dict(filename='id', keywords="subjects"),
                          object_type="Document",
                          create_new=True,
                          primary_key='id')
         self.assertIn('test1', self.target.objectIds())
-        print dir(self.target['test1'])
-        self.assertEqual(self.target['test1'].subjects, ['blah1','blah2'])
+        self.assertEqual(self.target['test1'].subjects, (u'blah1', u'blah2'))
+
+    def test_list_contributors(self):
+        dexterity_import(self.target,
+                         """filename,keywords\ntest1,"blah1;blah2" """,
+                         dict(filename='id', keywords="contributors"),
+                         object_type="Document",
+                         create_new=True,
+                         primary_key='id')
+        self.assertIn('test1', self.target.objectIds())
+        self.assertEqual(self.target['test1'].contributors, (u'blah1', u'blah2'))
+
+
+    def test_item_count(self):
+        dexterity_import(self.target,
+                         """filename,keywords\ntest1,1""",
+                         dict(filename='id', keywords="item_count"),
+                         object_type="Document",
+                         create_new=True,
+                         primary_key='id')
+        self.assertIn('test1', self.target.objectIds())
+        self.assertEqual(self.target['test1'].item_count, 1)
 
 
 
@@ -199,3 +231,29 @@ class TestExport(unittest.TestCase):
                              dict(header='URL',field="_url")],
                             None)
         self.assertIn("test1.mp4,http://nohost/plone/target/test1.mp4", res)
+
+    #def test_boolean(self):
+    #    dexterity_import(self.target,
+    #                     """filename,value\ntest1,True """,
+    #                     dict(filename='id', value="allow_discussion"),
+    #                     object_type="Document",
+    #                     create_new=True,
+    #                     primary_key='id')
+    #    res =  export_file(self.all(),
+    #                        [dict(header='Filename', field='id'),
+    #                         dict(header='value',field="allow_discussion")],
+    #                        None)
+    #    self.assertIn("test1,True", res)
+    #
+    #def test_contributors(self):
+    #    dexterity_import(self.target,
+    #                     """filename,keywords\ntest1,"blah1;blah2" """,
+    #                     dict(filename='id', keywords="contributors"),
+    #                     object_type="Document",
+    #                     create_new=True,
+    #                     primary_key='id')
+    #    res =  export_file(self.all(),
+    #                        [dict(header='Filename', field='id'),
+    #                         dict(header='value',field="contributors")],
+    #                        None)
+    #    self.assertIn("test1,blah;blah", res)
